@@ -1,0 +1,2347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sounds Fishy! - Party Bluffing Board Game</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Fredoka for playful board game titles, Inter & Noto Sans Thai for clean bilingual UI -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Tone.js for procedural sound effects -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', 'Noto Sans Thai', sans-serif;
+      background: radial-gradient(circle at 50% 0%, #0f3460 0%, #071930 60%, #040d1a 100%);
+      color: #f8fafc;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    h1, h2, h3, .font-game {
+      font-family: 'Fredoka', 'Noto Sans Thai', sans-serif;
+    }
+
+    /* Animated underwater bubbles background */
+    .bubble {
+      position: fixed;
+      bottom: -40px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(125, 211, 252, 0.25);
+      border-radius: 50%;
+      pointer-events: none;
+      animation: rise linear infinite;
+      z-index: 0;
+    }
+
+    @keyframes rise {
+      0% {
+        transform: translateY(0) scale(1);
+        opacity: 0;
+      }
+      20% {
+        opacity: 0.7;
+      }
+      80% {
+        opacity: 0.5;
+      }
+      100% {
+        transform: translateY(-110vh) scale(1.3);
+        opacity: 0;
+      }
+    }
+
+    /* 3D Card Flip Mechanics */
+    .perspective-1000 {
+      perspective: 1000px;
+    }
+
+    .card-inner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      text-align: center;
+      transition: transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
+      transform-style: preserve-3d;
+    }
+
+    .card-flipped .card-inner {
+      transform: rotateY(180deg);
+    }
+
+    .card-front, .card-back {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+      border-radius: 1.25rem;
+    }
+
+    .card-back {
+      transform: rotateY(180deg);
+    }
+
+    /* Tactile Game Buttons */
+    .btn-game {
+      transition: all 0.15s ease;
+      box-shadow: 0 5px 0 rgba(0, 0, 0, 0.35);
+    }
+    .btn-game:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 7px 0 rgba(0, 0, 0, 0.35);
+    }
+    .btn-game:active:not(:disabled) {
+      transform: translateY(3px);
+      box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+    }
+    .btn-game:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    /* Subtle floating animation for mascot */
+    @keyframes float {
+      0%, 100% { transform: translateY(0px) rotate(-2deg); }
+      50% { transform: translateY(-8px) rotate(2deg); }
+    }
+    .animate-float {
+      animation: float 3.5s ease-in-out infinite;
+    }
+
+    /* Shake animation when hitting Blue Fish */
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-8px) rotate(-2deg); }
+      40% { transform: translateX(8px) rotate(2deg); }
+      60% { transform: translateX(-6px); }
+      80% { transform: translateX(6px); }
+    }
+    .animate-shake {
+      animation: shake 0.5s ease-in-out;
+    }
+  </style>
+</head>
+<body class="relative selection:bg-cyan-400 selection:text-slate-950">
+
+  <!-- Decorative Underwater Bubbles Container -->
+  <div id="bubbles-container" aria-hidden="true"></div>
+
+  <!-- Main App Wrapper -->
+  <div class="relative z-10 max-w-4xl mx-auto px-4 py-6 sm:py-8 min-h-screen flex flex-col">
+
+    <!-- Top Navigation / Header -->
+    <header class="flex items-center justify-between gap-3 mb-6 bg-slate-900/70 backdrop-blur-md border border-cyan-500/20 px-4 py-3 rounded-2xl shadow-lg">
+      <div class="flex items-center gap-3 cursor-pointer" onclick="confirmReturnHome()">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-inner text-2xl">
+          🐟
+        </div>
+        <div>
+          <h1 class="text-xl sm:text-2xl font-bold tracking-wide bg-gradient-to-r from-cyan-300 via-sky-200 to-amber-300 bg-clip-text text-transparent">
+            SOUNDS FISHY!
+          </h1>
+          <p class="text-[11px] text-cyan-300/80 font-medium hidden sm:block">Party Bluffing & Trivia Game</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <!-- Sound Toggle -->
+        <button id="sound-toggle-btn" onclick="toggleSound()" title="Toggle Sound Effects" class="p-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-cyan-300 transition">
+          <span id="sound-icon">🔊</span>
+        </button>
+
+        <!-- Scoreboard Button (Visible during active game) -->
+        <button id="header-scores-btn" onclick="openModal('scoreboard-modal')" class="hidden px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-300 text-sm font-semibold transition flex items-center gap-1.5">
+          <span>🏆</span>
+          <span class="hidden sm:inline">Scores</span>
+        </button>
+
+        <!-- How to Play Button -->
+        <button onclick="openModal('rules-modal')" class="px-3.5 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-cyan-200 text-sm font-semibold transition flex items-center gap-1.5">
+          <span>❓</span>
+          <span>Rules</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Custom Toast / Message Banner (No alert() used!) -->
+    <div id="toast-banner" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 hidden transform transition-all duration-300">
+      <div id="toast-content" class="px-5 py-3 rounded-2xl shadow-2xl border font-medium text-sm flex items-center gap-2.5 backdrop-blur-md">
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 1: SETUP SCREEN                     -->
+    <!-- ========================================== -->
+    <main id="screen-setup" class="flex-1 flex flex-col justify-center">
+      <div class="bg-slate-900/80 backdrop-blur-md border border-cyan-500/25 rounded-3xl p-6 sm:p-8 shadow-2xl">
+        <!-- Hero Banner -->
+        <div class="text-center mb-8">
+          <div class="inline-flex items-center justify-center gap-3 text-4xl sm:text-5xl mb-3 animate-float">
+            <span>🐠</span>
+            <span>🐡</span>
+            <span>🦈</span>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-bold text-white mb-2">Gather Around the Tank!</h2>
+          <p class="text-slate-300 text-sm sm:text-base max-w-xl mx-auto">
+            One <span class="text-cyan-400 font-semibold">Blue Fish</span> knows the real answer. Everyone else is a <span class="text-rose-400 font-semibold">Red Herring</span> making up lies. Can the Guesser catch the fakes without eliminating the truth?
+          </p>
+        </div>
+
+        <!-- Players & Rounds Configuration Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <!-- Players Card -->
+          <div class="bg-slate-950/65 border border-slate-800 rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                <span>👥</span>
+                <span>Players (<span id="player-count">4</span>/10)</span>
+              </h3>
+              <span class="text-xs text-slate-400">Min 3 players</span>
+            </div>
+
+            <form onsubmit="handleAddPlayer(event)" class="flex gap-2 mb-3">
+              <input
+                type="text"
+                id="new-player-input"
+                maxlength="18"
+                placeholder="Enter player name..."
+                class="flex-1 bg-slate-900 border border-slate-700 focus:border-cyan-400 focus:outline-none rounded-xl px-3.5 py-2 text-sm text-white"
+              />
+              <button type="submit" class="btn-game px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm">
+                + Add
+              </button>
+            </form>
+
+            <div id="player-list" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <!-- Rounds & Trivia Deck Card -->
+          <div class="bg-slate-950/65 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+            <div>
+              <h3 class="text-lg font-bold text-white flex items-center gap-2 mb-3">
+                <span>🎲</span>
+                <span>Game Settings</span>
+              </h3>
+
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Number of Rounds
+              </label>
+              <div class="grid grid-cols-4 gap-2 mb-5">
+                <button type="button" data-rounds="3" onclick="selectRounds(3)" class="round-btn py-2.5 rounded-xl font-game font-bold text-base border transition bg-slate-900 border-slate-700 text-slate-300 hover:border-amber-400">3</button>
+                <button type="button" data-rounds="5" onclick="selectRounds(5)" class="round-btn py-2.5 rounded-xl font-game font-bold text-base border transition bg-amber-500 border-amber-300 text-slate-950 shadow-lg">5</button>
+                <button type="button" data-rounds="7" onclick="selectRounds(7)" class="round-btn py-2.5 rounded-xl font-game font-bold text-base border transition bg-slate-900 border-slate-700 text-slate-300 hover:border-amber-400">7</button>
+                <button type="button" data-rounds="10" onclick="selectRounds(10)" class="round-btn py-2.5 rounded-xl font-game font-bold text-base border transition bg-slate-900 border-slate-700 text-slate-300 hover:border-amber-400">10</button>
+              </div>
+
+              <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-bold text-cyan-300">📚 Trivia Deck</span>
+                  <span id="deck-count-badge" class="text-xs font-bold bg-cyan-500/20 text-cyan-300 px-2.5 py-1 rounded-full">100 Questions</span>
+                </div>
+                <p class="text-xs text-slate-400 mb-3">
+                  Includes 100 weird & surprising bilingual trivia facts (TH + EN) with end-of-round backstories.
+                </p>
+                <button type="button" onclick="openModal('custom-question-modal')" class="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-cyan-200 text-xs font-bold transition">
+                  ➕ Add Custom Question
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Start Game CTA -->
+        <button type="button" onclick="startGame()" class="btn-game w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 font-game font-bold text-xl sm:text-2xl">
+          🚀 Start Playing Sounds Fishy!
+        </button>
+      </div>
+    </main>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 2: PASS & REVEAL PHASE              -->
+    <!-- ========================================== -->
+    <section id="screen-reveal" class="hidden flex-1 flex flex-col justify-center">
+      <!-- Round Progress Pill -->
+      <div class="flex items-center justify-center mb-4">
+        <div class="px-4 py-1.5 rounded-full bg-slate-900/90 border border-cyan-500/30 text-xs font-bold uppercase tracking-widest text-cyan-300">
+          Round <span id="reveal-round-num">1</span> of <span id="reveal-total-rounds">5</span> • Secret Roles
+        </div>
+      </div>
+
+      <!-- STATE A: Pass Device Screen (Hidden Role) -->
+      <div id="reveal-pass-card" class="bg-slate-900/85 backdrop-blur-md border-2 border-cyan-500/30 rounded-3xl p-8 sm:p-10 text-center shadow-2xl max-w-lg mx-auto w-full">
+        <div class="w-20 h-20 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center text-4xl shadow-lg animate-float">
+          📱
+        </div>
+        <p class="text-sm uppercase tracking-widest text-cyan-300 font-bold mb-1">Pass the device to</p>
+        <h2 id="pass-player-name" class="text-3xl sm:text-4xl font-bold text-white mb-4">Player Name</h2>
+        <p class="text-slate-400 text-sm mb-8">
+          Make sure nobody else is peeking at the screen before you tap below!
+        </p>
+
+        <button onclick="revealCurrentPlayerRole()" class="btn-game w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 font-game font-bold text-xl">
+          👀 Reveal My Role
+        </button>
+
+        <div class="mt-5 text-xs text-slate-500">
+          Player <span id="reveal-step-current">1</span> of <span id="reveal-step-total">4</span>
+        </div>
+      </div>
+
+      <!-- STATE B: Secret Role Revealed -->
+      <div id="reveal-secret-card" class="hidden bg-slate-900/90 backdrop-blur-md border-2 rounded-3xl p-6 sm:p-8 text-center shadow-2xl max-w-xl mx-auto w-full transition-all">
+        <!-- Player Name Header -->
+        <div class="text-xs uppercase tracking-widest text-slate-400 font-bold mb-2">
+          Secret Identity for <span id="secret-player-name" class="text-white">Player</span>
+        </div>
+
+        <!-- Role Badge -->
+        <div id="role-badge-container" class="my-4 p-5 rounded-2xl border-2">
+          <div id="role-emoji" class="text-5xl mb-2">🕵️</div>
+          <h3 id="role-title" class="text-2xl sm:text-3xl font-bold uppercase tracking-wide mb-1">THE GUESSER</h3>
+          <p id="role-subtitle" class="text-sm font-medium opacity-90">Listen carefully and eliminate the fakes!</p>
+        </div>
+
+        <!-- Trivia Question Box -->
+        <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-4 text-left">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-amber-400">Trivia Question / คำถาม</span>
+          </div>
+          <p id="secret-question-th" class="text-base sm:text-lg font-bold text-white leading-snug mb-1.5">
+            คำถามภาษาไทย
+          </p>
+          <p id="secret-question-text" class="text-xs sm:text-sm font-medium text-slate-300 leading-snug">
+            Question text goes here?
+          </p>
+        </div>
+
+        <!-- Answer / Bluff Prompt Box -->
+        <div id="secret-instruction-box" class="rounded-2xl p-4 sm:p-5 mb-6 text-left border">
+          <!-- Dynamically filled based on Guesser / True Fish / Red Herring -->
+        </div>
+
+        <button onclick="hideAndPassNext()" id="hide-pass-btn" class="btn-game w-full py-4 rounded-2xl bg-slate-100 hover:bg-white text-slate-950 font-game font-bold text-lg">
+          🙈 Hide & Pass Device
+        </button>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 3: INTERROGATION & ELIMINATION      -->
+    <!-- ========================================== -->
+    <section id="screen-board" class="hidden flex-1 flex flex-col">
+      <!-- Top Trivia & Guesser Banner -->
+      <div class="bg-slate-900/85 backdrop-blur-md border border-cyan-500/30 rounded-3xl p-5 sm:p-6 mb-5 shadow-xl">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <span class="px-3 py-1 rounded-full bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-xs font-bold uppercase tracking-wider">
+            Round <span id="board-round-num">1</span> / <span id="board-total-rounds">5</span>
+          </span>
+          <div class="flex items-center gap-2 bg-amber-500/15 border border-amber-400/30 px-3.5 py-1 rounded-full">
+            <span class="text-sm">🕵️</span>
+            <span class="text-xs font-bold uppercase tracking-wider text-amber-300">
+              Guesser: <span id="board-guesser-name" class="text-white underline decoration-amber-400">Name</span>
+            </span>
+          </div>
+        </div>
+
+        <h2 id="board-question-th" class="text-lg sm:text-2xl font-bold text-white leading-snug mb-1">
+          คำถามภาษาไทยปรากฏที่นี่
+        </h2>
+        <p id="board-question-text" class="text-xs sm:text-sm font-medium text-cyan-200/85 leading-snug mb-3">
+          Trivia question appears here?
+        </p>
+
+        <p class="text-xs sm:text-sm text-slate-300 bg-slate-950/60 px-4 py-2.5 rounded-xl border border-slate-800">
+          🗣️ <strong>Step 1:</strong> Everyone except the Guesser gives their answer out loud.<br class="sm:hidden">
+          🎯 <strong>Step 2:</strong> <span id="board-guesser-instruction" class="text-cyan-300 font-semibold">Guesser</span>, tap a suspect card to eliminate a fake!
+        </p>
+      </div>
+
+      <!-- Suspects Grid (The Fish Cards) -->
+      <div id="suspects-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-6 flex-1">
+        <!-- Suspect cards generated dynamically -->
+      </div>
+
+      <!-- Guesser Action & Streak Control Bar -->
+      <div class="bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-3xl p-4 sm:p-5 shadow-2xl sticky bottom-3">
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <!-- Streak Info -->
+          <div class="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-start">
+            <div class="bg-slate-950/80 border border-slate-800 px-4 py-2.5 rounded-2xl">
+              <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Unbanked Streak</div>
+              <div class="font-game font-bold text-xl text-emerald-400">+<span id="streak-points">0</span> pts</div>
+            </div>
+            <div class="bg-slate-950/80 border border-slate-800 px-4 py-2.5 rounded-2xl">
+              <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Fakes Caught</div>
+              <div class="font-game font-bold text-xl text-rose-400"><span id="herrings-caught">0</span> / <span id="herrings-total">0</span></div>
+            </div>
+          </div>
+
+          <!-- Bank Points Button -->
+          <button
+            type="button"
+            id="bank-points-btn"
+            onclick="bankPointsAndEndRound()"
+            disabled
+            class="btn-game w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-500 text-slate-950 font-game font-bold text-base sm:text-lg"
+          >
+            💰 Bank +<span id="bank-btn-amount">0</span> & End Round
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 4: ROUND SUMMARY & REALITY CHECK    -->
+    <!-- ========================================== -->
+    <section id="screen-summary" class="hidden flex-1 flex flex-col justify-center">
+      <div class="bg-slate-900/85 backdrop-blur-md border border-cyan-500/30 rounded-3xl p-6 sm:p-8 shadow-2xl">
+        <div class="flex items-center justify-between mb-4">
+          <span class="px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs font-bold uppercase tracking-wider text-cyan-300">
+            Round <span id="summary-round-num">1</span> of <span id="summary-total-rounds">5</span> Complete
+          </span>
+        </div>
+
+        <!-- Round Outcome Banner -->
+        <div id="summary-outcome-banner" class="text-center p-5 rounded-2xl mb-6 border">
+          <div id="summary-emoji" class="text-4xl sm:text-5xl mb-2">🎉</div>
+          <h2 id="summary-title" class="text-2xl sm:text-3xl font-bold mb-1">Round Outcome</h2>
+          <p id="summary-subtitle" class="text-xs sm:text-sm opacity-90">Outcome details</p>
+        </div>
+
+        <!-- Official Fact Check & Blue Fish Roast Gimmick Card -->
+        <div class="bg-gradient-to-br from-cyan-950/90 via-slate-900/95 to-indigo-950/90 border-2 border-cyan-400/50 rounded-2xl p-4 sm:p-6 mb-6 shadow-xl relative overflow-hidden">
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-cyan-500/25">
+            <span class="text-xs font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
+              <span>🔍</span>
+              <span>REALITY CHECK: FACT VS. BLUE FISH</span>
+            </span>
+            <span class="text-xs font-bold text-slate-950 bg-cyan-300 px-3 py-1 rounded-full shadow">
+              🐟 Blue Fish: <span id="summary-blue-fish-player">Player</span>
+            </span>
+          </div>
+
+          <!-- Exact Official Answer -->
+          <div class="mb-4">
+            <div class="text-[11px] font-bold uppercase tracking-wider text-emerald-300 mb-1">
+              ✅ คำตอบที่ถูกต้องเป๊ะๆ (Official Real Answer):
+            </div>
+            <p id="summary-real-answer-th" class="text-xl sm:text-2xl font-bold text-white leading-snug mb-0.5">
+              คำตอบภาษาไทย
+            </p>
+            <p id="summary-real-answer" class="text-xs sm:text-sm font-medium text-cyan-200/90">
+              The real answer text
+            </p>
+          </div>
+
+          <!-- Extra Fun Fact / Backstory Callout -->
+          <div class="bg-slate-950/80 border border-cyan-500/30 rounded-xl p-3.5 sm:p-4 mb-4">
+            <div class="text-[11px] font-bold uppercase tracking-wider text-cyan-300 mb-1.5 flex items-center gap-1.5">
+              <span>📜</span>
+              <span>ความจริงเบื้องหลัง / Real Backstory & Fun Fact:</span>
+            </div>
+            <p id="summary-fact-th" class="text-sm sm:text-base text-slate-100 leading-relaxed mb-1.5 font-medium">
+              รายละเอียดความจริงเบื้องหลังภาษาไทย
+            </p>
+            <p id="summary-fact-en" class="text-xs text-slate-400 leading-relaxed">
+              Additional English backstory goes here.
+            </p>
+          </div>
+
+          <!-- Interactive Table Verdict Toggle -->
+          <div class="bg-amber-500/10 border border-amber-400/30 rounded-xl p-3.5">
+            <div class="text-center mb-2.5">
+              <p class="text-xs sm:text-sm font-bold text-amber-300">
+                🎤 โหวตจากคนทั้งวง: <span id="roast-player-name" class="underline decoration-amber-400">Player</span> อธิบายได้ใกล้เคียงความจริงแค่ไหน?!
+              </p>
+              <p class="text-[11px] text-amber-200/75">
+                How close was the Blue Fish's explanation to the real story?
+              </p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                id="verdict-nailed-btn"
+                onclick="castBlueFishVerdict('nailed')"
+                class="btn-game py-2.5 px-3 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/50 text-emerald-200 font-bold text-xs sm:text-sm flex flex-col items-center justify-center gap-0.5 transition"
+              >
+                <span>🎯 เล่าตรงปกเป๊ะ!</span>
+                <span class="text-[10px] opacity-80 font-normal">Nailed It!</span>
+              </button>
+
+              <button
+                type="button"
+                id="verdict-butchered-btn"
+                onclick="castBlueFishVerdict('butchered')"
+                class="btn-game py-2.5 px-3 rounded-xl bg-rose-500/20 hover:bg-rose-500/35 border border-rose-400/50 text-rose-200 font-bold text-xs sm:text-sm flex flex-col items-center justify-center gap-0.5 transition"
+              >
+                <span>💀 แถจนสีข้างถลอก!</span>
+                <span class="text-[10px] opacity-80 font-normal">Totally Butchered It!</span>
+              </button>
+            </div>
+
+            <div id="verdict-reaction-banner" class="hidden mt-3 text-center text-xs sm:text-sm font-bold py-2 px-3 rounded-lg"></div>
+          </div>
+        </div>
+
+        <!-- Points Awarded This Round -->
+        <div class="mb-6">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5">📊 Round Points Breakdown</h3>
+          <div id="summary-points-list" class="space-y-2">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <button type="button" id="next-round-btn" onclick="proceedToNextRound()" class="btn-game w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 font-game font-bold text-lg sm:text-xl">
+          Start Round 2 ➡️
+        </button>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 5: FINAL PODIUM / GAME OVER         -->
+    <!-- ========================================== -->
+    <section id="screen-gameover" class="hidden flex-1 flex flex-col justify-center">
+      <div class="bg-slate-900/90 backdrop-blur-md border-2 border-amber-400/50 rounded-3xl p-6 sm:p-8 text-center shadow-2xl">
+        <div class="text-5xl sm:text-6xl mb-3 animate-float">👑</div>
+        <div class="text-xs font-bold uppercase tracking-widest text-amber-300 mb-1">Final Standings</div>
+        <h2 id="winner-headline" class="text-3xl sm:text-4xl font-bold text-white mb-6">Winner!</h2>
+
+        <div id="final-leaderboard" class="space-y-2.5 max-w-xl mx-auto mb-8 text-left">
+          <!-- Populated by JS -->
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-3 max-w-xl mx-auto">
+          <button type="button" onclick="playAgainSamePlayers()" class="btn-game flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-game font-bold text-base sm:text-lg">
+            🔄 Play Again
+          </button>
+          <button type="button" onclick="resetToSetup()" class="btn-game flex-1 py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-game font-bold text-base sm:text-lg">
+            ⚙️ Change Players / Setup
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL 1: HOW TO PLAY RULES                 -->
+  <!-- ========================================== -->
+  <div id="rules-modal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-cyan-500/40 rounded-3xl max-w-lg w-full p-6 shadow-2xl max-h-[85vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-2xl font-bold text-cyan-300 flex items-center gap-2">
+          <span>🐟</span>
+          <span>How to Play Sounds Fishy!</span>
+        </h3>
+        <button type="button" onclick="closeModal('rules-modal')" class="text-slate-400 hover:text-white text-xl font-bold px-2">✕</button>
+      </div>
+
+      <div class="space-y-3.5 text-sm text-slate-200 leading-relaxed">
+        <div class="bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800">
+          <strong class="text-amber-300">1. Secret Roles:</strong> Each round has <strong>1 Guesser</strong>, <strong>1 Blue Fish</strong> (who gets the true answer in Thai & English), and <strong>Red Herrings</strong> (who bluff fake answers).
+        </div>
+        <div class="bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800">
+          <strong class="text-cyan-300">2. Out-Loud Answers & Elimination:</strong> Everyone except the Guesser says their answer out loud. The Guesser flips suspect cards one by one to eliminate fakes (+1 pt per fake caught).
+        </div>
+        <div class="bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800">
+          <strong class="text-emerald-300">3. Bank or Push Your Luck:</strong> Tap <strong>Bank</strong> anytime to lock in your streak points, or keep flipping—if you hit the <strong>Blue Fish</strong>, you lose your streak for that round and the Blue Fish scores <strong>+2 pts</strong>!
+        </div>
+        <div class="bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800">
+          <strong class="text-rose-300">4. End-of-Round Reality Check:</strong> Every round ends with the real backstory revealed so you can compare it with the Blue Fish's explanation and vote on how well they did!
+        </div>
+      </div>
+
+      <button type="button" onclick="closeModal('rules-modal')" class="btn-game mt-6 w-full py-3 rounded-2xl bg-cyan-500 text-slate-950 font-game font-bold text-base">
+        Got It!
+      </button>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL 2: LIVE SCOREBOARD                   -->
+  <!-- ========================================== -->
+  <div id="scoreboard-modal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-amber-400/40 rounded-3xl max-w-md w-full p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-2xl font-bold text-amber-300 flex items-center gap-2">
+          <span>🏆</span>
+          <span>Current Standings</span>
+        </h3>
+        <button type="button" onclick="closeModal('scoreboard-modal')" class="text-slate-400 hover:text-white text-xl font-bold px-2">✕</button>
+      </div>
+
+      <div id="modal-leaderboard-list" class="space-y-2 mb-5">
+        <!-- Populated by JS -->
+      </div>
+
+      <button type="button" onclick="closeModal('scoreboard-modal')" class="w-full py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm">
+        Close
+      </button>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL 3: ADD CUSTOM QUESTION               -->
+  <!-- ========================================== -->
+  <div id="custom-question-modal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-cyan-500/40 rounded-3xl max-w-md w-full p-6 shadow-2xl max-h-[88vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-xl font-bold text-cyan-300">➕ Add Custom Trivia Question</h3>
+        <button type="button" onclick="closeModal('custom-question-modal')" class="text-slate-400 hover:text-white text-xl font-bold px-2">✕</button>
+      </div>
+
+      <form onsubmit="handleAddCustomQuestion(event)" class="space-y-3.5">
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-cyan-300 mb-1">Question (Thai) *</label>
+          <textarea id="custom-q-th-input" rows="2" required placeholder="เช่น สัตว์ชนิดใดที่นอนหลับได้นานที่สุด?" class="w-full bg-slate-950 border border-slate-700 focus:border-cyan-400 focus:outline-none rounded-xl p-2.5 text-sm text-white"></textarea>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Question (English - Optional)</label>
+          <input type="text" id="custom-q-input" placeholder="e.g., Which animal can sleep the longest?" class="w-full bg-slate-950 border border-slate-700 focus:border-cyan-400 focus:outline-none rounded-xl p-2.5 text-sm text-white" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-emerald-300 mb-1">Real Answer (Thai) *</label>
+          <input type="text" id="custom-a-th-input" required placeholder="เช่น ตัวโคอาลา (หลับวันละ 18-22 ชม.)" class="w-full bg-slate-950 border border-slate-700 focus:border-emerald-400 focus:outline-none rounded-xl p-2.5 text-sm text-white" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Real Answer (English - Optional)</label>
+          <input type="text" id="custom-a-input" placeholder="e.g., Koala (sleeps 18–22 hours a day)" class="w-full bg-slate-950 border border-slate-700 focus:border-cyan-400 focus:outline-none rounded-xl p-2.5 text-sm text-white" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-amber-300/90 mb-1">Real Backstory / Fun Fact (Thai - Optional)</label>
+          <textarea id="custom-fact-th-input" rows="2" placeholder="เกร็ดความรู้เบื้องหลังคำตอบสำหรับโชว์ตอนเฉลยท้ายรอบ (ไม่บังคับ)" class="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 focus:outline-none rounded-xl p-2.5 text-sm text-white"></textarea>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-amber-300/75 mb-1">Real Backstory / Fun Fact (English - Optional)</label>
+          <input type="text" id="custom-fact-en-input" placeholder="e.g., Eucalyptus leaves are low in energy and take hours to digest." class="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 focus:outline-none rounded-xl p-2.5 text-sm text-white" />
+        </div>
+
+        <div class="flex gap-2 pt-2">
+          <button type="button" onclick="closeModal('custom-question-modal')" class="flex-1 py-3 rounded-xl bg-slate-800 text-slate-300 font-bold text-sm">Cancel</button>
+          <button type="submit" class="btn-game flex-1 py-3 rounded-xl bg-cyan-500 text-slate-950 font-bold text-sm">Add to Deck</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL 4: CONFIRM EXIT TO HOME              -->
+  <!-- ========================================== -->
+  <div id="confirm-exit-modal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-rose-500/40 rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl">
+      <div class="text-4xl mb-2">🐡</div>
+      <h3 class="text-xl font-bold text-white mb-2">Leave Current Game?</h3>
+      <p class="text-sm text-slate-400 mb-6">Your current round progress and scores will be reset.</p>
+      <div class="flex gap-3">
+        <button onclick="closeModal('confirm-exit-modal')" class="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm">Keep Playing</button>
+        <button onclick="resetToSetup()" class="btn-game flex-1 py-3 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-sm">Exit Game</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- GAME LOGIC & STATE MANAGEMENT              -->
+  <!-- ========================================== -->
+  <script>
+    /**
+     * Built-in Deck of 100 Weird, Surprising, Sounds-Fishy-Style Bilingual Trivia Questions (EN + TH + Backstory)
+     */
+    const DEFAULT_QUESTIONS = [
+      {
+        q: "In 19th-century England, what unusual item was sold in vending machines outside pubs?",
+        qTh: "ในอังกฤษยุคศตวรรษที่ 19 มีของแปลกอะไรถูกขายในตู้กดอัตโนมัติหน้าผับ?",
+        a: "Hot mashed potatoes",
+        aTh: "มันฝรั่งบดร้อนๆ",
+        factTh: "ในยุค 1890s กรุงลอนดอนมีตู้หยอดเหรียญชื่อ 'Tater Totter' ที่คอยอุ่นมันฝรั่งบดด้วยตะเกียงน้ำมันก๊าด ให้คนเมาที่เพิ่งเดินออกจากผับหยอดเหรียญกดกินแก้แฮงก์!",
+        factEn: "In 1890s London, coin-operated machines heated by paraffin lamps dispensed piping-hot mashed potatoes to hungry pub-goers."
+      },
+      {
+        q: "What is the official national animal of Scotland?",
+        qTh: "สัตว์ประจำชาติอย่างเป็นทางการของประเทศสกอตแลนด์คือตัวอะไร?",
+        a: "The Unicorn",
+        aTh: "ยูนิคอร์น (ม้ามีเขาในตำนาน)",
+        factTh: "ชาวสกอตเลือกยูนิคอร์นตั้งแต่ศตวรรษที่ 14 เพราะในตำนานเซลติก ยูนิคอร์นเป็นสัญลักษณ์ของความบริสุทธิ์ ความกล้าหาญ และเป็นศัตรูตัวฉกาจของสิงโต (สัญลักษณ์ของอังกฤษ)!",
+        factEn: "Chosen in the late 1300s, the unicorn symbolized purity, untamed chivalry, and was mythologically the natural enemy of England's symbol, the lion."
+      },
+      {
+        q: "Before rubber erasers were invented in 1770, what did people use to rub out pencil marks?",
+        qTh: "ก่อนที่ยางลบจะถูกประดิษฐ์ขึ้นในปี 1770 ผู้คนใช้อะไรลบรอยดินสอ?",
+        a: "Moistened crustless white bread",
+        aTh: "เนื้อขนมปังขาวชุบน้ำหมาดๆ",
+        factTh: "นักเขียนและศิลปินสมัยก่อนจะปั้นเนื้อขนมปังขาวให้เป็นก้อนกลมๆ แล้วถูบนกระดาษเพื่อดูดซับผงแกรไฟต์ จนกระทั่งวิศวกรชาวอังกฤษเผลอหยิบยางพารามาถูแทน!",
+        factEn: "Artists rolled crustless white bread into little balls to lift graphite off paper until Edward Nairne accidentally picked up a piece of rubber in 1770."
+      },
+      {
+        q: "What was the very first hockey puck made out of?",
+        qTh: "ลูกพัค (ลูกฮอกกี้น้ำแข็ง) ลูกแรกของโลกทำมาจากอะไร?",
+        a: "A frozen piece of cow dung",
+        aTh: "ขี้วัวแช่แข็ง",
+        factTh: "ในแคนาดายุคแรกๆ ชาวบ้านเล่นฮอกกี้บนบึงน้ำแข็งโดยใช้ก้อนขี้วัวที่แข็งโป๊กจากอากาศหนาวจัด เพราะมันลื่นไถลได้ดีและไม่แตกง่ายเหมือนไม้!",
+        factEn: "Early Canadian players used frozen cow patties found on fields because they slid smoothly on ice and didn't shatter as easily as wood."
+      },
+      {
+        q: "In Switzerland, it is illegal to own just one of which pet?",
+        qTh: "ในประเทศสวิตเซอร์แลนด์ ผิดกฎหมายที่จะเลี้ยงสัตว์ชนิดนี้เพียงแค่ตัวเดียว?",
+        a: "A guinea pig (because they get lonely)",
+        aTh: "หนูตะเภา (เพราะมันจะเหงาและซึมเศร้า)",
+        factTh: "กฎหมายคุ้มครองสัตว์ของสวิสระบุว่าหนูตะเภาเป็นสัตว์สังคมที่ต้องการเพื่อน ถึงขั้นมีบริการ 'ให้เช่าหนูตะเภา' สำหรับคนที่หนูตัวหนึ่งตายไปจะได้ไม่ผิดกฎหมาย!",
+        factEn: "Swiss animal welfare law mandates social animals must have companions—there are even 'rent-a-guinea-pig' matchmaking services when one passes away."
+      },
+      {
+        q: "What did Nintendo originally produce when it was founded in 1889?",
+        qTh: "บริษัท Nintendo ก่อตั้งขึ้นในปี 1889 เพื่อผลิตสินค้าอะไรเป็นอันดับแรก?",
+        a: "Handmade Hanafuda playing cards",
+        aTh: "ไพ่ญี่ปุ่นทำมือ (ฮานะฟุดะ)",
+        factTh: "ฟุซาจิโร ยามาอุจิ ก่อตั้ง Nintendo ในเกียวโตเพื่อทำไพ่ดอกไม้ทำมือ ซึ่งได้รับความนิยมอย่างมากในหมู่แก๊งยากูซ่าที่เปิดบ่อนพนันในยุคนั้น!",
+        factEn: "Founded in Kyoto in 1889, Nintendo crafted painted bark playing cards that became hugely popular in Yakuza-run gambling parlors."
+      },
+      {
+        q: "What weird superpower do wombats have regarding their poop?",
+        qTh: "ตัววอมแบต (Wombat) มีความสามารถพิเศษสุดแปลกอะไรเกี่ยวกับอึของมัน?",
+        a: "They poop in cubes so it doesn't roll away",
+        aTh: "อึออกมาเป็นก้อนสี่เหลี่ยมลูกบาศก์ เพื่อไม่ให้กลิ้งหนี",
+        factTh: "วอมแบตใช้อึวางเรียงเป็นอาณาเขตตามโขดหิน ลำไส้ส่วนปลายของมันมีความยืดหยุ่นต่างกันทำให้บีบอัดอึออกมาเป็นทรงลูกเต๋าได้คืนละเกือบ 100 ก้อน!",
+        factEn: "Wombats stack up to 100 cube-shaped droppings a night to mark territory; the flat sides stop them from rolling off rocks."
+      },
+      {
+        q: "In 1999, why did NASA accidentally lose a $125 million Mars orbiter?",
+        qTh: "ในปี 1999 ทำไม NASA ถึงทำยานสำรวจดาวอังคารมูลค่า 125 ล้านดอลลาร์พังโดยบังเอิญ?",
+        a: "One team used metric units and another used inches/feet",
+        aTh: "ทีมหนึ่งใช้หน่วยเมตริก แต่อีกทีมใช้หน่วยนิ้ว/ฟุต",
+        factTh: "บริษัท Lockheed Martin ส่งข้อมูลแรงขับเป็นหน่วยปอนด์-วินาที (อิมพีเรียล) แต่ทีม NASA คำนวณเป็นนิวตัน-วินาที (เมตริก) ทำให้ยานพุ่งเฉียดชั้นบรรยากาศดาวอังคารต่ำเกินไปจนไหม้!",
+        factEn: "Lockheed Martin software output imperial pound-seconds while NASA expected metric newton-seconds, causing the Mars Climate Orbiter to burn up."
+      },
+      {
+        q: "What was Bubble Wrap originally invented to be in 1957?",
+        qTh: "แผ่นกันกระแทก (Bubble Wrap) ถูกประดิษฐ์ขึ้นในปี 1957 เพื่อใช้เป็นอะไรในตอนแรก?",
+        a: "Textured 3D plastic wallpaper",
+        aTh: "วอลเปเปอร์ติดผนังลายนูน 3 มิติ",
+        factTh: "วิศวกร 2 คนเอาม่านอาบน้ำพลาสติก 2 แผ่นมาซีลเข้าด้วยกันหวังจะขายเป็นวอลเปเปอร์สุดล้ำ แต่ขายไม่ออกเลยเปลี่ยนมาใช้ห่อคอมพิวเตอร์ IBM แทน!",
+        factEn: "Two engineers sealed two shower curtains together to sell as trendy 3D wallpaper; when it flopped, they marketed it to protect IBM computers."
+      },
+      {
+        q: "Which common fruit floats in water because it is 25% air?",
+        qTh: "ผลไม้ชนิดใดที่ลอยน้ำได้เพราะข้างในมีอากาศอยู่ถึง 25%?",
+        a: "Apples",
+        aTh: "แอปเปิล",
+        factTh: "ช่องว่างเล็กๆ ระหว่างเซลล์ในเนื้อแอปเปิลกักเก็บอากาศไว้มากถึง 1 ใน 4 ของปริมาตรทั้งหมด ทำให้มันเบาและลอยน้ำได้สบายๆ (เป็นที่มาของเกมคาบแอปเปิลในอ่างน้ำ)!",
+        factEn: "Tiny air pockets between apple cells make up about 25% of its volume, making it less dense than water and perfect for Halloween bobbing."
+      },
+      {
+        q: "What did the inventor of the Pringles can have done with his ashes after he died in 2008?",
+        qTh: "ผู้คิดค้นกระป๋องมันฝรั่ง Pringles สั่งเสียให้นำเถ้ากระดูกของเขาไปทำอะไรหลังเสียชีวิต?",
+        a: "Buried inside a Pringles can",
+        aTh: "บรรจุเถ้ากระดูกบางส่วนไว้ในกระป๋อง Pringles แล้วฝัง",
+        factTh: "ลูกๆ ของ Fredric Baur แวะซื้อกระป๋อง Pringles รสออริจินัลระหว่างทางไปงานศพ เพื่อนำเถ้ากระดูกของคุณพ่อบรรจุลงกระป๋องและฝังลงหลุมตามคำสั่งเสียสุดท้าย!",
+        factEn: "Fredric Baur's children stopped at a Walgreens on the way to the funeral home to buy an Original Pringles can to bury part of his ashes in."
+      },
+      {
+        q: "What strange weather phenomenon happened in Lajamanu, Australia in 2010 and 2023?",
+        qTh: "ปรากฏการณ์สภาพอากาศสุดประหลาดอะไรเกิดขึ้นที่เมืองลาจามานู ประเทศออสเตรเลีย?",
+        a: "Live fish rained from the sky",
+        aTh: "มีปลาเป็นๆ ตกลงมาจากท้องฟ้าเหมือนฝน",
+        factTh: "พายุหมุนงวงช้างดูดฝูงปลา Spangled Perch ตัวเล็กๆ จากแม่น้ำขึ้นไปบนเมฆฝน แล้วพัดมาตกกลางเมืองที่อยู่ห่างจากแหล่งน้ำหลายร้อยกิโลเมตร!",
+        factEn: "Strong updrafts and waterspouts sucked spangled perch fish from rivers high into storm clouds and dropped them alive onto the outback town."
+      },
+      {
+        q: "What were chainsaws originally invented for in the late 18th century?",
+        qTh: "เลื่อยยนต์ (Chainsaw) ถูกประดิษฐ์ขึ้นครั้งแรกในปลายศตวรรษที่ 18 เพื่อใช้ทำอะไร?",
+        a: "To assist doctors in cutting bone during difficult childbirths",
+        aTh: "ใช้ช่วยแพทย์ตัดกระดูกเวลาทำคลอดลูกที่คลอดยาก",
+        factTh: "หมอชาวสกอตแลนด์ 2 คนคิดค้นเลื่อยโซ่มือหมุนขนาดเล็กเพื่อผ่ากระดูกเชิงกรานในเคสที่ทารกติดอยู่ในช่องคลอด ก่อนที่คนตัดไม้จะเอาไอเดียไปขยายขนาด!",
+        factEn: "Two Scottish doctors invented a hand-cranked chain-blade tool in 1780 to speed up symphysiotomy surgeries before loggers adapted it for trees."
+      },
+      {
+        q: "In ancient Rome, what bodily fluid was collected and used as mouthwash and laundry detergent?",
+        qTh: "ในสมัยโรมันโบราณ ของเหลวจากร่างกายชนิดใดถูกเก็บไปใช้เป็นน้ำยาบ้วนปากและน้ำยาซักผ้า?",
+        a: "Human urine (because of the ammonia)",
+        aTh: "ปัสสาวะคน (เพราะมีแอมโมเนียช่วยขจัดคราบ)",
+        factTh: "ฉี่คนมีแอมโมเนียที่ช่วยฟอกฟันให้ขาวและซักผ้าสะอาด จักรพรรดิเวสปาเซียนถึงขั้นเก็บ 'ภาษีปัสสาวะ' จากห้องน้ำสาธารณะเลยทีเดียว!",
+        factEn: "Urine breaks down into ammonia, which whitened teeth and cleaned togas—Emperor Vespasian even placed a profitable tax on public urine collection."
+      },
+      {
+        q: "What is a group of flamingos officially called in English?",
+        qTh: "ฝูงนกฟลามิงโก ในภาษาอังกฤษมีคำเรียกเฉพาะกลุ่มว่าอะไร?",
+        a: "A flamboyance",
+        aTh: "ความฉูดฉาด / ความอลังการ (Flamboyance)",
+        factTh: "ด้วยขนสีชมพูสดใสและท่าเดินเชิดคอสุดเริ่ด ฝูงนกฟลามิงโกจึงได้ชื่อเรียกว่า 'A flamboyance' ซึ่งแปลว่าความโดดเด่นหรูหราอลังการ!",
+        factEn: "Because of their vibrant pink feathers and theatrical strutting, a flock of flamingos is fittingly named a 'flamboyance'."
+      },
+      {
+        q: "Why did Napoleon Bonaparte once get attacked by a massive horde during a celebratory hunt?",
+        qTh: "ทำไมจักรพรรดินโปเลียนถึงเคยถูกฝูงสัตว์บุกโจมตีวิ่งไล่ระหว่างงานล่าสัตว์เฉลิมฉลอง?",
+        a: "His men accidentally released hundreds of tame pet rabbits instead of wild hares",
+        aTh: "ลูกน้องดันปล่อยกระต่ายเลี้ยงเชื่องๆ หลายร้อยตัวแทนกระต่ายป่า มันเลยวิ่งกรูมาขออาหาร",
+        factTh: "แทนที่จะวิ่งหนี กระต่ายบ้านนับพันตัวกลับคิดว่านโปเลียนคือคนเลี้ยงที่จะเอาผักกาดมาให้ พวกมันเลยวิ่งกรูเข้าใส่จนจักรพรรดิต้องรีบขึ้นรถม้าหนี!",
+        factEn: "Instead of fleeing, the domesticated bunnies thought Napoleon was bringing lettuce and swarmed his legs until he retreated to his carriage."
+      },
+      {
+        q: "What item did the world's first webcam at Cambridge University monitor in 1991?",
+        qTh: "เว็บแคมตัวแรกของโลกที่มหาวิทยาลัยเคมบริดจ์ในปี 1991 ถูกตั้งไว้เพื่อส่องดูอะไร?",
+        a: "A coffee pot in the breakroom so researchers knew when it was full",
+        aTh: "กาน้ำกาแฟในห้องพัก เพื่อดูว่ากาแฟเต็มหรือยังจะได้ไม่เดินไปเก้อ",
+        factTh: "นักวิจัยขี้เกียจเดินขึ้นลงบันไดหลายชั้นเพื่อไปดูว่ากาแฟหมดหรือยัง เลยต่อกล้องถ่ายทอดสดกาน้ำกาแฟผ่านเครือข่ายคอมพิวเตอร์ เป็นต้นกำเนิดเว็บแคมตัวแรกของโลก!",
+        factEn: "Trojan Room researchers hated walking downstairs to find an empty pot, so they rigged a camera to stream live coffee levels across their network."
+      },
+      {
+        q: "What is the only natural food that never spoils and can last thousands of years?",
+        qTh: "อาหารธรรมชาติชนิดเดียวที่ไม่เคยเน่าเสียและเก็บไว้ได้นานเป็นพันปีคืออะไร?",
+        a: "Honey",
+        aTh: "น้ำผึ้ง",
+        factTh: "นักโบราณคดีเคยขุดพบไหบรรจุน้ำผึ้งอายุกว่า 3,000 ปีในสุสานฟาโรห์อียิปต์ ซึ่งยังคงสภาพดีและกินได้จริง เพราะน้ำผึ้งมีความชื้นต่ำมากและมีฤทธิ์เป็นกรดอ่อนๆ!",
+        factEn: "Archaeologists found 3,000-year-old pots of honey in Egyptian tombs that were still edible thanks to honey's low moisture and natural acidity."
+      },
+      {
+        q: "In 2007, what did a man in California get arrested for trying to smuggle across the border in his pants?",
+        qTh: "ในปี 2007 ชายคนหนึ่งในแคลิฟอร์เนียถูกจับข้อหาลักลอบซ่อนอะไรไว้ในกางเกงเพื่อข้ามชายแดน?",
+        a: "Two live pygmy monkeys",
+        aTh: "ลิงแคระตัวเป็นๆ 2 ตัว",
+        factTh: "เจ้าหน้าที่ศุลกากรสังเกตเห็นเป้ากางเกงของชายคนนี้ขยับดุ๊กดิ๊กผิดปกติ พอล้วงตรวจก็เจอลูกลิงมาร์โมเสทแคระขนาดเท่าหัวแม่มือเกาะอยู่ข้างใน!",
+        factEn: "Customs officers noticed suspicious movement inside his trousers and discovered two thumb-sized baby pygmy marmosets clinging inside."
+      },
+      {
+        q: "What color is a hippopotamus's sweat?",
+        qTh: "เหงื่อของฮิปโปโปเตมัสมีสีอะไร?",
+        a: "Pinkish-red (it acts as natural sunscreen and antibiotic)",
+        aTh: "สีแดงอมชมพู (ทำหน้าที่เป็นครีมกันแดดและยาฆ่าเชื้อธรรมชาติ)",
+        factTh: "คนสมัยก่อนนึกว่าฮิปโปเหงื่อออกเป็นเลือด แต่จริงๆ แล้วเป็นสารคัดหลั่งสีแดงส้มที่ช่วยสะท้อนรังสียูวีและฆ่าเชื้อแบคทีเรียบนผิวหนัง!",
+        factEn: "Often mistaken for 'blood sweat,' hippos secrete a reddish-pink oily fluid that blocks UV rays and prevents skin infections."
+      },
+      {
+        q: "In Japan, what unusual savory flavor of KitKat is famously sold as a regional souvenir?",
+        qTh: "ในประเทศญี่ปุ่น คิทแคท (KitKat) รสชาติสุดแปลกแบบของคาวรสใดที่เป็นของฝากขึ้นชื่อ?",
+        a: "Wasabi (and Soy Sauce)",
+        aTh: "รสวาซาบิ (และรสโชยุ)",
+        factTh: "ญี่ปุ่นออกคิทแคทมาแล้วกว่า 300 รสชาติ โดยรสวาซาบิจากจังหวัดชิซุโอกะทำจากวาซาบิแท้ๆ ผสมไวท์ช็อกโกแลต ให้ความเผ็ดขึ้นจมูกนิดๆ!",
+        factEn: "Japan has created over 300 regional KitKat flavors, including Shizuoka Wasabi made with real grated wasabi root blended into white chocolate."
+      },
+      {
+        q: "What did the word 'salary' originally refer to in ancient Rome?",
+        qTh: "คำว่า 'Salary' (เงินเดือน) ในสมัยโรมันโบราณ เดิมทีหมายถึงสิ่งของอะไร?",
+        a: "Salt (money given to soldiers to buy salt)",
+        aTh: "เกลือ (เบี้ยเลี้ยงที่จ่ายให้ทหารเอาไปซื้อเกลือ)",
+        factTh: "ในยุคที่ยังไม่มีตู้เย็น เกลือมีค่าดั่งทองคำเพราะใช้ถนอมอาหาร คำว่า 'Salarium' ในภาษาละตินจึงหมายถึงเงินค่าเกลือของทหารโรมัน!",
+        factEn: "Before refrigeration, salt was vital for preserving food; Roman soldiers received a 'salarium' allowance specifically to buy salt."
+      },
+      {
+        q: "How do sea otters keep from drifting apart while sleeping on water?",
+        qTh: "ตัวนากทะเลทำอย่างไรเพื่อไม่ให้ลอยแยกออกจากกันเวลาหลับกลางน้ำ?",
+        a: "They hold hands",
+        aTh: "พวกมันจับมือกันไว้",
+        factTh: "นากทะเลจะนอนหงายลอยตัวบนผิวน้ำและจับมือกันไว้เป็นคู่ๆ หรือบางทีก็เอาสาหร่ายเคลป์มาพันตัวไว้เหมือนสมอเรือเพื่อไม่ให้คลื่นซัดหลงทาง!",
+        factEn: "Sea otters sleep floating on their backs and hold paws with a partner—or wrap themselves in kelp—so ocean currents don't separate them."
+      },
+      {
+        q: "In 1932, Australia fought a brief military 'war' against which bird?",
+        qTh: "ในปี 1932 กองทัพออสเตรเลียเคยเปิดศึกสงครามปราบปรามนกชนิดใด?",
+        a: "Emus (The Great Emu War)",
+        aTh: "นกอีมู (มหาสงครามนกอีมู)",
+        factTh: "กองทัพส่งทหารพร้อมปืนกลไปปราบฝูงนกอีมู 20,000 ตัวที่บุกกินพืชไร่ แต่พวกนกวิ่งเร็วและแตกแถวเก่งมากจนทหารยิงแทบไม่โดน สุดท้ายฝ่ายนกอีมูเป็นฝ่ายชนะ!",
+        factEn: "Soldiers armed with machine guns were deployed to cull 20,000 crop-destroying emus, but the birds outmaneuvered the troops and 'won' the conflict."
+      },
+      {
+        q: "What common kitchen condiment was sold as a medicine for indigestion in the 1830s?",
+        qTh: "เครื่องปรุงรสในครัวชนิดใดที่เคยถูกขายเป็นยารักษาโรคอาหารไม่ย่อยในยุค 1830?",
+        a: "Ketchup (sold as tomato pills)",
+        aTh: "ซอสมะเขือเทศ (ขายในรูปแบบยาเม็ดมะเขือเทศ)",
+        factTh: "คุณหมอ จอห์น คุก เบนเน็ตต์ อ้างว่าซอสมะเขือเทศรักษาโรคท้องเสียและดีซ่านได้ จึงอัดเป็น 'ยาเม็ดซอสมะเขือเทศ' ขายดีเป็นเทน้ำเทท่า!",
+        factEn: "Dr. John Cook Bennett claimed tomatoes cured diarrhea and indigestion, selling concentrated ketchup in pill form across America in 1834."
+      },
+      {
+        q: "In Thailand, what is the full ceremonial name of Bangkok famous for holding a Guinness World Record?",
+        qTh: "ชื่อเต็มของกรุงเทพมหานครได้รับการบันทึกในกินเนสส์บุ๊คว่าเป็นอะไร?",
+        a: "The longest place name in the world (168 letters in English)",
+        aTh: "ชื่อสถานที่ที่ยาวที่สุดในโลก",
+        factTh: "ชื่อเต็ม 'กรุงเทพมหานคร อมรรัตนโกสินทร์ มหินทรายุธยา...' มีความยาวถึง 168 ตัวอักษรภาษาอังกฤษ ได้รับการบันทึกใน Guinness World Records อย่างเป็นทางการ!",
+        factEn: "Bangkok's ceremonial Thai name translates to 168 Latin letters, officially holding the Guinness World Record for the longest place name."
+      },
+      {
+        q: "What unusual animal was officially promoted to Air Chief Marshal in the Royal Thai Air Force?",
+        qTh: "สัตว์เลี้ยงชนิดใดที่เคยได้รับการแต่งตั้งยศเป็นถึง 'พลอากาศเอก' ในกองทัพอากาศไทย?",
+        a: "A poodle dog named Foo Foo",
+        aTh: "สุนัขพันธุ์พุดเดิล (ชื่อ ฟูฟู)",
+        factTh: "สุนัขพุดเดิลสีขาวตัวโปรดชื่อ 'ฟูฟู' ได้รับยศพลอากาศเอกและมีเครื่องแบบเต็มยศสวมใส่เวลาออกงานเลี้ยงทางการ รวมถึงงานรับรองทูตสหรัฐฯ ด้วย!",
+        factEn: "Foo Foo, a beloved white toy poodle, held the official rank of Air Chief Marshal complete with custom dress uniforms at formal state events."
+      },
+      {
+        q: "In Japan, there is a popular festival where Sumo wrestlers compete to make babies do what?",
+        qTh: "ในญี่ปุ่นมีเทศกาลดังที่นักซูโม่จะอุ้มเด็กทารกมาแข่งกันเพื่อทำให้เด็กทำอะไร?",
+        a: "Cry the loudest and fastest (Nakizumo Festival)",
+        aTh: "ร้องไห้ให้ดังที่สุดและเร็วที่สุด",
+        factTh: "เทศกาล 'นาคิซูโม่' จัดขึ้นมากว่า 400 ปี ตามความเชื่อโบราณของญี่ปุ่นที่ว่า 'เด็กร้องไห้เสียงดังจะเติบโตแข็งแรงและขับไล่สิ่งชั่วร้ายออกไปได้'!",
+        factEn: "The 400-year-old Nakizumo festival celebrates the Japanese proverb 'crying babies grow fast,' believing loud cries ward off evil spirits."
+      },
+      {
+        q: "What fruit is technically classified as a berry, while strawberries are NOT?",
+        qTh: "ผลไม้ชนิดใดที่ทางพฤกษศาสตร์จัดว่าเป็น 'เบอร์รี' แต่สตรอว์เบอร์รีกลับไม่ใช่?",
+        a: "Bananas (and watermelons)",
+        aTh: "กล้วย (และแตงโม)",
+        factTh: "ตามหลักพฤกษศาสตร์ เบอร์รีต้องเจริญมาจากรังไข่เดี่ยวและมีเมล็ดอยู่ข้างในเนื้อ ซึ่งกล้วย แตงโม และมะเขือเทศตรงตามตำราเป๊ะ ส่วนสตรอว์เบอร์รีมีเมล็ดอยู่ด้านนอก!",
+        factEn: "Botanically, berries develop from a single ovary with seeds inside—making bananas, watermelons, and pumpkins true berries, unlike strawberries."
+      },
+      {
+        q: "How many noses does a garden slug have?",
+        qTh: "ทาก (Slug) มีจมูกทั้งหมดกี่จมูก?",
+        a: "Four noses",
+        aTh: "4 จมูก",
+        factTh: "หนวด 4 เส้นบนหัวของทากไม่ได้มีไว้แค่สัมผัส แต่เป็นอวัยวะรับกลิ่นทั้ง 4 เส้น โดยคู่บนใช้ดมกลิ่นระยะไกล ส่วนคู่ล่างใช้ดมกลิ่นตามพื้นดิน!",
+        factEn: "Slugs have two pairs of tentacles on their heads—all four act as olfactory organs to smell food and predators in the air and on the ground."
+      },
+      {
+        q: "What was the original color of carrots before Dutch farmers bred them to be orange?",
+        qTh: "แครอทมีสีอะไรเป็นสีดั้งเดิม ก่อนที่เกษตรกรชาวดัตช์จะพัฒนาสายพันธุ์ให้เป็นสีส้ม?",
+        a: "Purple (and yellow)",
+        aTh: "สีม่วง (และสีเหลือง)",
+        factTh: "แครอทป่าดั้งเดิมมีสีม่วงและเหลือง จนกระทั่งศตวรรษที่ 17 เกษตรกรชาวดัตช์คัดเลือกสายพันธุ์แครอทสีส้มขึ้นมาเพื่อเป็นเกียรติแก่ราชวงศ์ 'House of Orange' ของเนเธอร์แลนด์!",
+        factEn: "Wild carrots were originally purple and yellow until 17th-century Dutch growers selectively bred orange carrots to honor the House of Orange."
+      },
+      {
+        q: "In 1977, what unusual object did NASA put on the Voyager spacecraft to send into deep space?",
+        qTh: "ในปี 1977 NASA ได้ใส่วัตถุอะไรลงไปในยาน Voyager เพื่อส่งออกไปนอกอวกาศ?",
+        a: "A Golden Record with sounds of Earth, music, and greetings",
+        aTh: "แผ่นเสียงทองคำที่บันทึกเสียงจากโลก ดนตรี และคำทักทาย",
+        factTh: "แผ่นเสียงทองคำชุบทองแดงนี้บรรจุเสียงคลื่น เสียงหัวใจเต้น เพลงของบีโธเฟน รวมถึงคำทักทาย 55 ภาษา (มีภาษาไทยด้วยว่า 'สวัสดีค่ะ สหายในธรณีโพ้น...') เผื่อเอเลี่ยนมาเจอ!",
+        factEn: "The gold-plated copper phonograph record carries music, Earth sounds, and greetings in 55 languages as a time capsule for extraterrestrials."
+      },
+      {
+        q: "What does a male penguin give to a female penguin to 'propose' marriage?",
+        qTh: "เพนกวินตัวผู้จะมอบอะไรให้เพนกวินตัวเมียเพื่อขอแต่งงาน?",
+        a: "A smooth pebble",
+        aTh: "ก้อนกรวดผิวเรียบสวยๆ 1 ก้อน",
+        factTh: "เพนกวิน Adélie ตัวผู้จะเดินหาหินกรวดที่กลมและเรียบที่สุดบนชายหาดเพื่อมอบให้ตัวเมีย ถ้าเธอรับไปวางในรังก็แปลว่า 'ตกลงแต่งงาน'!",
+        factEn: "Male Adélie penguins search beaches for the smoothest pebble to present to a mate; if she accepts it into her nest, they become partners."
+      },
+      {
+        q: "Which famous fast-food chain once created bubblegum-flavored broccoli to get kids to eat veggies?",
+        qTh: "ร้านฟาสต์ฟู้ดชื่อดังเจ้าใดเคยคิดค้น 'บรอกโคลีรสหมากฝรั่ง' เพื่อให้เด็กยอมกินผัก?",
+        a: "McDonald's",
+        aTh: "แมคโดนัลด์ (McDonald's)",
+        factTh: "ในปี 2014 ซีอีโอของ McDonald's เปิดเผยว่าทีมเชฟเคยทดลองทำบรอกโคลีรสหมากฝรั่งเพื่อจูงใจเด็กๆ แต่ผลเทสต์ออกมาว่าเด็กๆ งงและไม่ชอบรสชาติสุดแปลกนี้!",
+        factEn: "In 2014, McDonald's CEO revealed their test kitchen developed bubblegum-flavored broccoli for Happy Meals, though kids found the taste too confusing."
+      },
+      {
+        q: "What happened to the owner of the Segway scooter company in 2010?",
+        qTh: "เกิดอะไรขึ้นกับเจ้าของบริษัทผู้ผลิตสกู๊ตเตอร์ Segway ในปี 2010?",
+        a: "He accidentally rode a Segway off a cliff into a river and died",
+        aTh: "เขาขี่รถ Segway ตกหน้าผาลงแม่น้ำเสียชีวิต",
+        factTh: "Jimi Heselden มหาเศรษฐีชาวอังกฤษผู้ซื้อกิจการบริษัท Segway กำลังขี่รถ Segway รุ่นวิบากพาสุนัขเดินเล่นริมหน้าผา ก่อนจะเสียหลักตกลงไปในแม่น้ำ Wharfe อย่างน่าเศร้า",
+        factEn: "British millionaire Jimi Heselden, who bought the Segway company, tragically drove an off-road Segway off a riverside cliff while walking his dog."
+      },
+      {
+        q: "In Finland, what annual championship involves men carrying their wives through an obstacle course?",
+        qTh: "ในประเทศฟินแลนด์ มีการแข่งขันชิงแชมป์ประจำปีสุดแปลกที่ผู้ชายต้องแบกภรรยาวิ่งวิบาก เพื่อชิงรางวัลอะไร?",
+        a: "The wife's weight in beer",
+        aTh: "เบียร์ในปริมาณที่เท่ากับน้ำหนักตัวของภรรยา",
+        factTh: "การแข่งขัน 'Wife Carrying World Championships' ในฟินแลนด์ ผู้ชนะจะได้รับเบียร์ฟรีตามน้ำหนักตัวของภรรยาเป๊ะๆ (ยิ่งภรรยาหนัก ยิ่งได้เบียร์เยอะ)!",
+        factEn: "At Finland's annual Wife Carrying World Championships, the winning husband takes home the exact weight of his wife in cases of beer."
+      },
+      {
+        q: "What is the national sport of Canada in the summer?",
+        qTh: "กีฬาประจำชาติฤดูร้อนของประเทศแคนาดาคืออะไร?",
+        a: "Lacrosse (not ice hockey!)",
+        aTh: "ลาครอส (Lacrosse) ไม่ใช่ฮอกกี้น้ำแข็ง",
+        factTh: "หลายคนคิดว่าฮอกกี้น้ำแข็งคือกีฬาประจำชาติหนึ่งเดียวของแคนาดา แต่กฎหมายปี 1994 ระบุให้ฮอกกี้เป็นกีฬาฤดูหนาว และ 'ลาครอส' (กีฬาของชนพื้นเมือง) เป็นกีฬาประจำชาติฤดูร้อน!",
+        factEn: "Canada's 1994 National Sports Act officially designates ice hockey as its national winter sport and Indigenous-originated lacrosse as its summer sport."
+      },
+      {
+        q: "High heels were originally invented in the 10th century for men of what profession?",
+        qTh: "รองเท้าส้นสูงถูกประดิษฐ์ขึ้นครั้งแรกในศตวรรษที่ 10 เพื่อผู้ชายอาชีพอะไร?",
+        a: "Persian horse-riding soldiers (to keep feet in stirrups)",
+        aTh: "ทหารม้าชาวเปอร์เซีย (เพื่อให้เท้าเกาะกับโกลนม้าได้มั่นคงเวลายิงธนู)",
+        factTh: "เวลาทหารม้าเปอร์เซียยืนบนโกลนเพื่อยิงธนู ส้นรองเท้าที่สูงจะช่วยล็อกเท้าไม่ให้หลุดจากโกลน ต่อมาแฟชั่นนี้ฮิตในหมู่ขุนนางชายยุโรปก่อนจะกลายเป็นรองเท้าผู้หญิง!",
+        factEn: "Persian cavalry wore heeled boots so their feet stayed locked in stirrups while standing to shoot arrows; European male aristocrats later adopted the trend."
+      },
+      {
+        q: "What animal produces milk that turns pink right after giving birth?",
+        qTh: "สัตว์ชนิดใดที่น้ำนมของมันมีสีชมพูในช่วงแรกคลอดลูก?",
+        a: "A yak (due to natural blood mixed into its colostrum)",
+        aTh: "ตัวจามรี (Yak) ช่วงเพิ่งคลอดลูกใหม่ๆ จะเป็นสีชมพูเพราะปนเลือด",
+        factTh: "ความเชื่อในเน็ตชอบบอกว่านมฮิปโปสีชมพู (ซึ่งไม่จริง นมฮิปโปสีขาว!) แต่ 'จามรี' (Yak) จะผลิตน้ำนมเหลืองแรกคลอดที่มีเลือดปนตามธรรมชาติจนเป็นสีชมพูสดใส!",
+        factEn: "Contrary to the internet myth about hippos, yak colostrum is naturally mixed with blood right after giving birth, giving it a bright pink color."
+      },
+      {
+        q: "What bizarre phobia is 'Arachibutyrophobia'?",
+        qTh: "โรคกลัวสุดแปลกที่ชื่อว่า 'Arachibutyrophobia' คืออาการกลัวอะไร?",
+        a: "Fear of peanut butter sticking to the roof of your mouth",
+        aTh: "กลัวเนยถั่วติดเพดานปาก",
+        factTh: "อาการนี้สามารถเป็นได้ตั้งแต่แค่รำคาญเวลาเนยถั่วเหนียวติดเพดานปาก ไปจนถึงขั้นตื่นตระหนกกลัวหายใจไม่ออกหรือกลืนไม่ลงจนไม่กล้ากินเนยถั่วตลอดชีวิต!",
+        factEn: "Derived from Latin words for peanut and butter, this phobia ranges from mild discomfort to severe panic over choking on sticky peanut butter."
+      },
+      {
+        q: "In South Korea, what number is considered unlucky and often skipped in elevator buttons?",
+        qTh: "ในเกาหลีใต้ เลขอะไรถือเป็นเลขอัปมงคลและมักถูกข้ามไปในปุ่มกดลิฟต์?",
+        a: "Number 4 (sounds like the word for 'death')",
+        aTh: "เลข 4 (เพราะออกเสียงพ้องกับคำว่า 'ตาย')",
+        factTh: "ในเกาหลี จีน และญี่ปุ่น เลข 4 ออกเสียงว่า 'ซา' ซึ่งพ้องเสียงกับคำว่า 'ความตาย' ลิฟต์ในตึกเก่าหรือโรงพยาบาลในเกาหลีจึงมักใช้ตัวอักษร 'F' (Four) แทนเลข 4!",
+        factEn: "Because the number 4 ('sa') sounds identical to the word for 'death' in Korean, many buildings label the 4th floor 'F' instead."
+      },
+      {
+        q: "How long was the shortest war in recorded human history (between Britain and Zanzibar in 1896)?",
+        qTh: "สงครามที่สั้นที่สุดในประวัติศาสตร์โลก (ระหว่างอังกฤษกับแซนซิบาร์) ใช้เวลาสู้รบกันนานเท่าไหร่?",
+        a: "38 to 45 minutes",
+        aTh: "38 ถึง 45 นาที",
+        factTh: "สุลต่านองค์ใหม่ของแซนซิบาร์ขึ้นครองราชย์โดยไม่ขออนุญาตอังกฤษ กองเรืออังกฤษจึงระดมยิงถล่มพระราชวังจนสุลต่านยอมแพ้ภายในเวลาไม่ถึง 45 นาที!",
+        factEn: "When a new sultan took power without British approval in 1896, Royal Navy ships bombarded the palace and forced a surrender in under 45 minutes."
+      },
+      {
+        q: "What do butterflies use to taste their food?",
+        qTh: "ผีเสื้อใช้อวัยวะส่วนไหนในการรับรสชาติอาหาร?",
+        a: "Their feet",
+        aTh: "ขา / เท้าของมัน",
+        factTh: "ปลายขาของผีเสื้อมีตัวรับรสชาติที่ไวต่อน้ำตาลมากกว่าลิ้นมนุษย์ถึง 200 เท่า แค่บินไปเกาะใบไม้หรือดอกไม้ก็รู้ทันทีว่ากินได้หรือวางไข่ได้ไหม!",
+        factEn: "Butterflies have chemoreceptors on their tarsi (feet) 200 times stronger than human taste buds, allowing them to taste plants simply by landing on them."
+      },
+      {
+        q: "In Venice, Italy, what law applies to all gondolas (traditional boats)?",
+        qTh: "ในเมืองเวนิส ประเทศอิตาลี มีกฎหมายบังคับเรื่องอะไรกับเรือกอนโดลาทุกลำ?",
+        a: "They must be painted black",
+        aTh: "เรือทุกลำต้องทาสีดำเท่านั้น",
+        factTh: "ในปี 1562 สภาเมืองเวนิสออกกฎหมายบังคับให้เรือกอนโดลาทุกลำทาสีดำ เพื่อหยุดการแข่งขันอวดร่ำอวดรวยของเหล่าขุนนางที่ตกแต่งเรือด้วยทองคำและผ้าไหมสุดหรู!",
+        factEn: "A 1562 Venetian decree mandated all gondolas be painted black to stop wealthy nobles from trying to outdo each other with gold-plated boats."
+      },
+      {
+        q: "What did ancient Egyptians use as pillows?",
+        qTh: "ชาวอียิปต์โบราณใช้อะไรหนุนหัวแทนหมอนเวลานอน?",
+        a: "Curved blocks of stone or wood",
+        aTh: "แท่นหินหรือแท่นไม้โค้งๆ แข็งๆ",
+        factTh: "ชาวอียิปต์โบราณเชื่อว่าศีรษะเป็นที่สถิตของชีวิตและวิญญาณ จึงใช้แท่นรองศีรษะทำจากหินหรือไม้โค้งเพื่อยกหัวให้ลอยเหนือพื้น ป้องกันแมลงคลานเข้าหูและช่วยระบายความร้อน!",
+        factEn: "Ancient Egyptians slept on curved stone or wooden headrests to keep their heads elevated away from insects and allow cooling airflow in the desert heat."
+      },
+      {
+        q: "Which planet in our solar system spins clockwise (backwards compared to almost all others)?",
+        qTh: "ดาวเคราะห์ดวงใดในระบบสุริยะที่หมุนรอบตัวเองตามเข็มนาฬิกา (สวนทางกับดาวดวงอื่น)?",
+        a: "Venus",
+        aTh: "ดาวศุกร์",
+        factTh: "นักดาราศาสตร์คาดว่าในอดีตดาวศุกร์อาจถูกดาวเคราะห์น้อยยักษ์พุ่งชนอย่างจังจนแกนหมุนพลิกกลับด้าน ทำให้บนดาวศุกร์ดวงอาทิตย์ขึ้นทางทิศตะวันตกและตกทางทิศตะวันออก!",
+        factEn: "Likely knocked upside-down by a massive ancient collision, Venus rotates backwards so the Sun rises in the west and sets in the east."
+      },
+      {
+        q: "What was the original name of the search engine Google before it was changed in 1997?",
+        qTh: "ชื่อดั้งเดิมของเว็บไซต์ค้นหา Google ก่อนที่จะเปลี่ยนชื่อในปี 1997 คืออะไร?",
+        a: "BackRub",
+        aTh: "แบ็กรับ (BackRub - นวดหลัง)",
+        factTh: "แลร์รี เพจ และ เซอร์เกย์ บริน ตั้งชื่อระบบค้นหาแรกว่า 'BackRub' เพราะระบบทำงานโดยการวิเคราะห์ 'Backlinks' (ลิงก์ย้อนกลับ) ของเว็บไซต์ ก่อนจะเปลี่ยนเป็น Google (มาจากคำว่า Googol)!",
+        factEn: "Larry Page and Sergey Brin originally named their search engine 'BackRub' because it ranked pages by analyzing backlinks before renaming it Google."
+      },
+      {
+        q: "In Denmark, if you are still unmarried on your 25th birthday, what do your friends throw at you?",
+        qTh: "ในประเทศเดนมาร์ก ถ้าอายุครบ 25 ปียังไม่แต่งงาน เพื่อนๆ จะเอาอะไรมาสาดใส่ตัวคุณ?",
+        a: "Cinnamon powder",
+        aTh: "ผงอบเชย (ซินนามอน)",
+        factTh: "ธรรมเนียมนี้สืบทอดมาจากพ่อค้าเครื่องเทศสมัยก่อนที่เดินทางตลอดจนไม่มีเวลาแต่งงาน ถ้าอายุ 25 ยังโสดเพื่อนจะมัดกับเสาแล้วสาดผงอบเชยใส่ (และถ้าอายุ 30 ยังโสด จะโดนสาดพริกไทยแทน)!",
+        factEn: "Dating back to traveling spice merchants, Danish friends douse unmarried 25-year-olds in cinnamon—and upgrade to black pepper if they're still single at 30!"
+      },
+      {
+        q: "What is a group of crows called?",
+        qTh: "ฝูงอีกา ในภาษาอังกฤษมีคำเรียกเฉพาะกลุ่มสุดหลอนว่าอะไร?",
+        a: "A murder",
+        aTh: "การฆาตกรรม (A murder of crows)",
+        factTh: "คำเรียกนี้มาจากนิทานพื้นบ้านโบราณที่มองว่าอีกาเป็นนกแห่งความตายและลางร้าย รวมถึงพฤติกรรมของฝูงอีกาที่มักรุมจิกตีอีกาตัวที่ป่วยหรือแปลกแยกจนตาย!",
+        factEn: "Rooted in medieval folklore linking crows to omens of death—and crows' habit of gang-attacking outcasts—a flock is called 'a murder of crows'."
+      },
+      {
+        q: "What common household item did Thomas Edison NOT invent, despite popular belief?",
+        qTh: "สิ่งของใดที่คนทั่วไปมักเข้าใจผิดว่า โทมัส เอดิสัน เป็นคนแรกที่ประดิษฐ์ขึ้น?",
+        a: "The light bulb (he improved it, over 20 inventors made earlier versions)",
+        aTh: "หลอดไฟ (เขาแค่พัฒนาให้ใช้งานได้นานขึ้น มีคนคิดก่อนหน้านั้นกว่า 20 คน)",
+        factTh: "นักประดิษฐ์ชาวอังกฤษอย่าง Joseph Swan และ Humphry Davy สร้างหลอดไฟได้ก่อนเอดิสันหลายสิบปี แต่ไส้หลอดขาดไวมาก เอดิสันจึงคิดค้นไส้หลอดคาร์บอนจากไม้ไผ่ที่สว่างได้นานกว่า 1,200 ชั่วโมง!",
+        factEn: "Over 20 inventors built incandescent lamps decades earlier, but Edison patented the first commercially practical, long-lasting carbonized bamboo filament."
+      },
+      {
+        q: "What weird thing can octopuses do with their hearts?",
+        qTh: "ปลาหมึกยักษ์มีความแปลกประหลาดอะไรเกี่ยวกับหัวใจของมัน?",
+        a: "They have 3 hearts (and blue blood)",
+        aTh: "มีหัวใจ 3 ดวง (และเลือดสีฟ้า)",
+        factTh: "หัวใจ 2 ดวงทำหน้าที่สูบฉีดเลือดไปที่เหงือก ส่วนอีก 1 ดวงสูบฉีดไปเลี้ยงทั่วร่างกาย และที่แปลกสุดคือหัวใจดวงหลักจะ 'หยุดเต้น' เวลาที่มันว่ายน้ำ ทำให้ปลาหมึกชอบคลานมากกว่าว่าย!",
+        factEn: "Octopuses have two branchial hearts for their gills and one systemic heart for the body—which actually stops beating when they swim, exhausting them quickly."
+      },
+      {
+        q: "In Singapore, what common item has been banned from import and sale since 1992?",
+        qTh: "ในประเทศสิงคโปร์ สิ่งของธรรมดาชนิดใดถูกสั่งห้ามนำเข้าและห้ามขายมาตั้งแต่ปี 1992?",
+        a: "Chewing gum",
+        aTh: "หมากฝรั่ง",
+        factTh: "สิงคโปร์ออกกฎหมายแบนหมากฝรั่งในปี 1992 หลังจากมีคนเอาหมากฝรั่งไปแปะขวางเซ็นเซอร์ประตูรถไฟฟ้า MRT จนรถไฟหยุดชะงักทั้งระบบและทำความสะอาดยากมาก!",
+        factEn: "Singapore banned gum in 1992 after vandals stuck chewing gum on MRT subway train door sensors, repeatedly halting trains across the city."
+      },
+      {
+        q: "What was the first toy ever advertised on television in 1952?",
+        qTh: "ของเล่นชิ้นแรกของโลกที่ได้ออกโฆษณาทางโทรทัศน์ในปี 1952 คืออะไร?",
+        a: "Mr. Potato Head",
+        aTh: "มิสเตอร์โปเตโต้เฮด (หัวมันฝรั่ง)",
+        factTh: "ในชุดขายปี 1952 ไม่มีหัวมันฝรั่งพลาสติกแถมมาให้! กล่องของเล่นมีแค่ชิ้นส่วนตา จมูก ปาก และหมวก เด็กๆ ต้องไปหยิบ 'หัวมันฝรั่งของจริง' ในครัวคุณแม่มาเสียบเล่นเอง!",
+        factEn: "The original 1952 kit didn't include a plastic body—kids received only plastic eyes, noses, and hats to stick into real potatoes from the kitchen!"
+      },
+      {
+        q: "What animal cannot stick its tongue out?",
+        qTh: "สัตว์ชนิดใดที่ไม่สามารถแลบลิ้นออกมาข้างนอกปากได้?",
+        a: "A crocodile",
+        aTh: "จระเข้",
+        factTh: "ลิ้นของจระเข้ถูกยึดติดกับพื้นปากด้านล่างด้วยเยื่อพังผืดหนาตลอดทั้งแผ่น ทำให้ขยับไม่ได้เลย ซึ่งช่วยป้องกันไม่ให้น้ำไหลเข้าคอเวลาจระเข้อ้าปากงับเหยื่อใต้น้ำ!",
+        factEn: "A crocodile's tongue is anchored to the bottom of its mouth by a thick membrane, preventing it from moving and helping seal its throat underwater."
+      },
+      {
+        q: "In France, it is illegal to name a pig after which famous historical figure?",
+        qTh: "ในประเทศฝรั่งเศส เคยมีกฎหมายห้ามตั้งชื่อ 'หมู' ตามชื่อบุคคลสำคัญในประวัติศาสตร์คนใด?",
+        a: "Napoleon",
+        aTh: "นโปเลียน (Napoleon)",
+        factTh: "กฎหมายนี้เกิดขึ้นในยุคที่จักรพรรดินโปเลียนเรืองอำนาจ เพื่อป้องกันไม่ให้เกษตรกรหรือนักการเมืองฝ่ายตรงข้ามตั้งชื่อหมูว่า 'นโปเลียน' เพื่อล้อเลียนผู้นำประเทศ!",
+        factEn: "Enacted during Napoleon Bonaparte's rule, the law prevented farmers and political critics from mocking the emperor by naming farm pigs after him."
+      },
+      {
+        q: "What percentage of a watermelon is water?",
+        qTh: "แตงโมมีน้ำเป็นส่วนประกอบอยู่กี่เปอร์เซ็นต์?",
+        a: "About 92%",
+        aTh: "ประมาณ 92%",
+        factTh: "แตงโมมีน้ำมากถึง 92% และมีน้ำตาลธรรมชาติแค่ประมาณ 6% นักสำรวจในทะเลทรายแอฟริกาสมัยก่อนจึงนิยมพกแตงโมติดตัวไปใช้แทนกระติกน้ำดื่ม!",
+        factEn: "At 92% water, watermelons were historically carried by desert explorers across Africa as natural, portable canteens."
+      },
+      {
+        q: "What did Coca-Cola originally contain in its recipe until 1903?",
+        qTh: "เครื่องดื่มโคคา-โคล่า (Coca-Cola) เคยมีส่วนผสมต้องห้ามอะไรอยู่ในสูตรจนถึงปี 1903?",
+        a: "Cocaine (from coca leaves)",
+        aTh: "โคเคน (สกัดจากใบโคคา)",
+        factTh: "เภสัชกร จอห์น เพมเบอร์ตัน คิดค้นสูตรในปี 1886 โดยผสมสารสกัดจากใบโคคา (ที่มีโคเคน) กับเมล็ดโคล่า (ที่มีคาเฟอีน) ขายเป็นยาชูกำลังแก้ปวดหัว!",
+        factEn: "Invented in 1886 as a patent medicine tonic, original Coca-Cola combined cocaine-rich coca leaf extract with caffeine-packed kola nuts."
+      },
+      {
+        q: "What is the only mammal capable of true sustained flight?",
+        qTh: "สัตว์เลี้ยงลูกด้วยนมชนิดเดียวในโลกที่สามารถบินได้จริงๆ คือตัวอะไร?",
+        a: "A bat",
+        aTh: "ค้างคาว",
+        factTh: "สัตว์อย่างกระรอกบินหรือบ่างทำได้แค่ 'ร่อน' ลงจากที่สูงเท่านั้น แต่ค้างคาวมีกระดูกนิ้วมือที่ยืดยาวและมีพังผืดบางเชื่อมกัน ทำให้กระพือปีกบินขึ้นฟ้าได้เหมือนนก!",
+        factEn: "While 'flying' squirrels only glide, bats have elongated finger bones webbed with thin skin membranes that allow true powered flight."
+      },
+      {
+        q: "In 2016, Mozart sold more CDs than which modern pop superstar?",
+        qTh: "ในปี 2016 อัลบั้มรวมเพลงของ 'โมสาร์ท' ทำยอดขายซีดีแซงหน้าศิลปินป๊อปชื่อดังคนใด?",
+        a: "Beyoncé (and Drake)",
+        aTh: "บียอนเซ่ (Beyoncé)",
+        factTh: "ค่ายเพลง Universal Music ออกบ็อกซ์เซ็ต 'Mozart 225' เนื่องในโอกาสครบรอบ 225 ปีการเสียชีวิตของโมสาร์ท โดยมีซีดีถึง 200 แผ่นในกล่องเดียว ทำให้ยอดนับแผ่นพุ่งแซงศิลปินป๊อปทุกคน!",
+        factEn: "Universal Music released a massive 200-CD 'Mozart 225' box set; because Billboard counts each disc in a box set, Mozart outsold Beyoncé in 2016."
+      },
+      {
+        q: "What do koalas have that is almost identical to humans—so much so it can confuse crime scene investigators?",
+        qTh: "ตัวโคอาลามีอวัยวะส่วนไหนที่เหมือนมนุษย์มากจนอาจทำให้ตำรวจตรวจสถานที่เกิดเหตุสับสนได้?",
+        a: "Fingerprints",
+        aTh: "ลายนิ้วมือ",
+        factTh: "แม้จะส่องด้วยกล้องจุลทรรศน์อิเล็กตรอน ลายนิ้วมือที่มีทั้งลวดลายก้นหอยและรอยโค้งของโคอาลาก็แทบแยกไม่ออกจากลายนิ้วมือมนุษย์เลย!",
+        factEn: "Even under a scanning electron microscope, koala fingerprints have loops and whorls virtually indistinguishable from human prints."
+      },
+      {
+        q: "In the movie 'Psycho' (1960), what did Alfred Hitchcock use as fake blood in the famous shower scene?",
+        qTh: "ในหนังเรื่อง Psycho (1960) ผู้กำกับใช้อะไรทำเป็นเลือดปลอมในฉากห้องน้ำสุดโด่งดัง?",
+        a: "Chocolate syrup (Bosco)",
+        aTh: "น้ำเชื่อมช็อกโกแลต (เพราะถ่ายเป็นหนังขาว-ดำ)",
+        factTh: "เพราะหนังถ่ายทำด้วยฟิล์มขาว-ดำ เลือดปลอมสีแดงสดจะดูจางเกินไปบนจอ ฮิตช์ค็อกจึงใช้น้ำเชื่อมช็อกโกแลตยี่ห้อ Bosco ที่ข้นและให้สีดำเข้มตัดกับกระเบื้องห้องน้ำสีขาวได้สมจริงที่สุด!",
+        factEn: "Because Psycho was filmed in black-and-white, red fake blood looked too pale, whereas thick Bosco chocolate syrup gave the exact dark contrast needed."
+      },
+      {
+        q: "What country has the most vending machines per capita in the world?",
+        qTh: "ประเทศใดมีตู้ขายสินค้าอัตโนมัติต่อจำนวนประชากรมากที่สุดในโลก?",
+        a: "Japan (about 1 machine for every 23 people)",
+        aTh: "ญี่ปุ่น (เฉลี่ย 1 ตู้ ต่อประชากร 23 คน)",
+        factTh: "ญี่ปุ่นมีตู้กดอัตโนมัติกว่า 4 ล้านตู้ทั่วประเทศ นอกจากน้ำดื่มแล้วยังมีตู้ขายราเม็งร้อนๆ ร่ม เนกไท ไข่ไก่สด ไปจนถึงเนื้อวาฬและแมลงทอด!",
+        factEn: "With over 4 million machines nationwide, Japan sells everything from hot canned coffee and umbrellas to fresh eggs and ramen via vending machines."
+      },
+      {
+        q: "What is the fear of long words ironically called?",
+        qTh: "ชื่อเรียกอาการ 'โรคกลัวคำศัพท์ยาวๆ' มีชื่อภาษาอังกฤษสุดกวนว่าอะไร?",
+        a: "Hippopotomonstrosesquippedaliophobia",
+        aTh: "ฮิปโปโปโตมอนสโตรเซสควิปเปดาเลียโฟเบีย (ยาว 36 ตัวอักษร!)",
+        factTh: "นักภาษาศาสตร์จงใจตั้งชื่อโรคนี้ให้ยาวถึง 36 ตัวอักษรเพื่อล้อเลียนอาการของโรค โดยเอาคำว่า 'ฮิปโป' กับ 'มอนสเตอร์' มาผสมกับคำละตินที่แปลว่า 'คำยาวฟุตครึ่ง'!",
+        factEn: "Coined playfully by combining 'hippopotamus' and 'monster' with 'sesquipedalian' (long words), the 36-letter name itself triggers the phobia!"
+      },
+      {
+        q: "How do bees communicate the location of good flowers to other bees?",
+        qTh: "ผึ้งสื่อสารบอกตำแหน่งดอกไม้ที่มีน้ำหวานให้เพื่อนผึ้งตัวอื่นรู้ด้วยวิธีใด?",
+        a: "By doing a 'waggle dance'",
+        aTh: "เต้นส่ายก้น (Waggle dance)",
+        factTh: "ผึ้งงานจะเดินวนเป็นเลข 8 พร้อมส่ายก้นรัวๆ โดย 'มุม' ที่มันส่ายก้นจะบอกทิศทางเทียบกับดวงอาทิตย์ และ 'ระยะเวลา' ที่ส่ายก้นจะบอกระยะทางเป๊ะๆ!",
+        factEn: "Bees perform a figure-eight 'waggle dance' where the angle relative to gravity indicates direction from the Sun and duration indicates distance."
+      },
+      {
+        q: "What was the very first item ever scanned with a barcode at a supermarket in 1974?",
+        qTh: "สินค้าชิ้นแรกของโลกที่ถูกยิงบาร์โค้ดสแกนจ่ายเงินที่ซูเปอร์มาร์เก็ตในปี 1974 คืออะไร?",
+        a: "A pack of Wrigley's Juicy Fruit chewing gum",
+        aTh: "หมากฝรั่ง Wrigley's Juicy Fruit 1 แพ็ก",
+        factTh: "เหตุการณ์ประวัติศาสตร์นี้เกิดขึ้นที่ร้าน Marsh Supermarket ในรัฐโอไฮโอ สหรัฐฯ เมื่อวันที่ 26 มิถุนายน 1974 ปัจจุบันแพ็กหมากฝรั่งชิ้นนั้นถูกเก็บรักษาไว้ในพิพิธภัณฑ์สมิธโซเนียน!",
+        factEn: "Scanned on June 26, 1974 at an Ohio supermarket, a replica of that historic 67-cent pack of Juicy Fruit gum is now displayed at the Smithsonian."
+      },
+      {
+        q: "In Germany, what happens if you run out of fuel on the Autobahn highway?",
+        qTh: "ในประเทศเยอรมนี ถ้าคุณขับรถน้ำมันหมดกลางทางด่วนออโต้บาห์น (Autobahn) จะเกิดอะไรขึ้น?",
+        a: "It is illegal and you get fined (because it's preventable)",
+        aTh: "ผิดกฎหมายและโดนตำรวจปรับ (ถือเป็นความประมาทที่ป้องกันได้)",
+        factTh: "เนื่องจากทางด่วน Autobahn หลายช่วงไม่มีการจำกัดความเร็ว การจอดรถเสียเพราะน้ำมันหมดถือเป็นอันตรายร้ายแรงต่อรถที่วิ่งมาด้วยความเร็วสูง ตำรวจจึงปรับทันที!",
+        factEn: "Because cars travel at extreme speeds on Germany's Autobahn, stopping due to an empty tank is deemed preventable negligence and carries a fine."
+      },
+      {
+        q: "What animal sleeps while standing up, locking its legs so it doesn't fall over?",
+        qTh: "สัตว์ชนิดใดที่สามารถยืนหลับได้โดยล็อกข้อต่อขาไม่ให้ล้ม?",
+        a: "Horses (and cows)",
+        aTh: "ม้า (และวัว)",
+        factTh: "ม้ามีระบบเส้นเอ็นและข้อต่อพิเศษที่เรียกว่า 'Stay Apparatus' ซึ่งล็อกขาให้ตั้งตรงได้โดยไม่ต้องออกแรงกล้ามเนื้อ ทำให้มันงีบหลับขณะยืนและวิ่งหนีนักล่าได้ทันทีที่ตื่น!",
+        factEn: "Horses possess a 'stay apparatus' of tendons and ligaments that locks their leg joints without muscular effort so they can doze while ready to flee."
+      },
+      {
+        q: "Which spice was once worth more than its weight in gold during the Middle Ages?",
+        qTh: "เครื่องเทศชนิดใดในยุคกลางที่มีมูลค่าแพงยิ่งกว่าทองคำในน้ำหนักที่เท่ากัน?",
+        a: "Black pepper (or Saffron)",
+        aTh: "พริกไทยดำ (และหญ้าฝรั่น)",
+        factTh: "ในยุคกลางยุโรป พริกไทยดำถูกเรียกว่า 'ทองคำดำ' ใช้จ่ายแทนเงินสด จ่ายค่าเช่าบ้าน จ่ายภาษี และเป็นสินสอดทองหมั้นของลูกสาวขุนนาง!",
+        factEn: "Known as 'black gold' in medieval Europe, peppercorns were accepted as currency to pay taxes, rent, and noble dowries."
+      },
+      {
+        q: "What strange thing happens to the Eiffel Tower in Paris during hot summer days?",
+        qTh: "เกิดอะไรขึ้นกับหอไอเฟลในกรุงปารีสในช่วงฤดูร้อนที่อากาศร้อนจัด?",
+        a: "It grows up to 15 cm (6 inches) taller due to thermal expansion",
+        aTh: "มันจะสูงขึ้นอีกประมาณ 15 เซนติเมตร เพราะเหล็กขยายตัว",
+        factTh: "หอไอเฟลสร้างจากเหล็กดัด เมื่อโดนแดดร้อนจัดในฤดูร้อน อะตอมเหล็กจะขยายตัวทำให้หอคอยสูงขึ้นสูงสุด 15 ซม. และเอนหนีแสงแดดเล็กน้อย!",
+        factEn: "Thermal expansion causes the Eiffel Tower's wrought-iron structure to expand in summer heat, growing up to 15 cm taller and tilting slightly away from the sun."
+      },
+      {
+        q: "What animal can hold its breath underwater longer than a dolphin?",
+        qTh: "สัตว์บกชนิดใดที่สามารถกลั้นหายใจใต้น้ำได้นานกว่าปลาโลมา?",
+        a: "A sloth (up to 40 minutes!)",
+        aTh: "ตัวสลอธ (กลั้นหายใจได้นานถึง 40 นาที)",
+        factTh: "สลอธสามารถชะลออัตราการเต้นของหัวใจให้เหลือแค่ 1 ใน 3 ของปกติ ทำให้มันกลั้นหายใจใต้น้ำได้นานถึง 40 นาที ในขณะที่โลมาต้องขึ้นมาหายใจทุกๆ 10 นาที!",
+        factEn: "Sloths can slow their heart rate to one-third its normal pace, letting them hold their breath underwater for 40 minutes—longer than dolphins!"
+      },
+      {
+        q: "In 1998, Sony accidentally sold 700,000 camcorders with a night-vision feature that could see through what?",
+        qTh: "ในปี 1998 Sony เผลอวางขายกล้องวิดีโอ 7 แสนตัวที่มีโหมดอินฟราเรดมองทะลุอะไรได้?",
+        a: "Thin dark clothing and swimsuits",
+        aTh: "เสื้อผ้าสีเข้มบางๆ และชุดว่ายน้ำ",
+        factTh: "โหมด NightShot อินฟราเรดของกล้อง Sony Handycam ดันส่องทะลุผ้าใยสังเคราะห์บางๆ และชุดว่ายน้ำที่เปียกน้ำได้ จน Sony ต้องรีบเรียกคืนสินค้าและปรับแก้เซ็นเซอร์ด่วน!",
+        factEn: "Sony's Handycam NightShot infrared sensor accidentally penetrated thin synthetic fabrics and wet swimsuits, prompting a rapid recall and firmware fix."
+      },
+      {
+        q: "What is the official state snack of Texas?",
+        qTh: "ของว่างประจำรัฐอย่างเป็นทางการของรัฐเท็กซัส สหรัฐอเมริกา คืออะไร?",
+        a: "Tortilla chips and salsa",
+        aTh: "แผ่นแป้งตอร์ติญ่าทอดกรอบกับซอสซัลซ่า",
+        factTh: "ในปี 2003 สภานิติบัญญัติรัฐเท็กซัสลงมติอย่างเป็นทางการให้ 'ชิปส์และซัลซ่า' เป็นของว่างประจำรัฐ หลังจากนักเรียนประถมกลุ่มหนึ่งยื่นเรื่องเสนอต่อสภา!",
+        factEn: "In 2003, the Texas Legislature officially named tortilla chips and salsa the state snack after a group of elementary school students petitioned lawmakers."
+      },
+      {
+        q: "Which bird can fly backwards?",
+        qTh: "นกชนิดเดียวในโลกที่สามารถบินถอยหลังได้คือนกอะไร?",
+        a: "A hummingbird",
+        aTh: "นกฮัมมิงเบิร์ด",
+        factTh: "นกฮัมมิงเบิร์ดมีข้อต่อหัวไหล่ที่หมุนได้รอบทิศทางเหมือนใบพัดเฮลิคอปเตอร์ ทำให้มันบินลอยตัวนิ่งกลางอากาศ บินตีลังกา และบินถอยหลังออกจากดอกไม้ได้สบายๆ!",
+        factEn: "Unique ball-and-socket shoulder joints let hummingbirds rotate their wings in a figure-eight pattern, enabling sustained backward and upside-down flight."
+      },
+      {
+        q: "What did the 'M&M' in M&M's chocolate candies originally stand for?",
+        qTh: "ตัวอักษร 'M&M' บนขนมช็อกโกแลต M&M ย่อมาจากชื่อของใคร?",
+        a: "Mars & Murrie (the two founders)",
+        aTh: "นามสกุลของผู้ก่อตั้ง 2 คน (Forrest Mars และ Bruce Murrie)",
+        factTh: "Forrest Mars (ลูกชายเจ้าของบริษัท Mars) ร่วมมือกับ Bruce Murrie (ลูกชายประธานบริษัท Hershey's) สร้างช็อกโกแลตเคลือบน้ำตาลที่ไม่ละลายในมือทหารช่วงสงครามโลกครั้งที่ 2!",
+        factEn: "Forrest Mars partnered with Hershey executive son Bruce Murrie in 1941 to create melt-resistant chocolate rations for WWII soldiers."
+      },
+      {
+        q: "In Iceland, there is a popular mobile app specifically designed to prevent citizens from accidentally doing what?",
+        qTh: "ในประเทศไอซ์แลนด์ มีแอปพลิเคชันมือถือยอดฮิตที่สร้างขึ้นเพื่อป้องกันไม่ให้คนในประเทศเผลอทำอะไร?",
+        a: "Dating a close relative (since the population is so small)",
+        aTh: "เผลอคบหากับญาติพี่น้องของตัวเอง (เพราะประชากรทั้งประเทศมีน้อย)",
+        factTh: "ไอซ์แลนด์มีประชากรแค่ประมาณ 3.8 แสนคนและแทบทุกคนมีบรรพบุรุษร่วมกัน แอป 'ÍslendingaApp' มีฟีเจอร์ชนมือถือเข้าหากันเพื่อเช็กสายเลือดก่อนจะจีบกันจริงจัง!",
+        factEn: "With a tiny, closely related population of ~380,000, Iceland's 'ÍslendingaApp' lets two people bump phones to check if they are close cousins before dating."
+      },
+      {
+        q: "What part of a cat's body has the same unique pattern as a human fingerprint?",
+        qTh: "อวัยวะส่วนใดของแมวที่มีลวดลายเฉพาะตัวไม่ซ้ำกันเลยเหมือนลายนิ้วมือคน?",
+        a: "Its nose pad",
+        aTh: "จมูกของแมว",
+        factTh: "ตุ่มนูนและร่องเล็กๆ บนจมูกของแมวแต่ละตัวมีเอกลักษณ์เฉพาะตัวไม่ซ้ำกันเลยบนโลก (จมูกสุนัขก็เป็นแบบนี้เช่นกัน)!",
+        factEn: "The pattern of bumps and ridges on a cat's nose pad is completely unique to every individual feline, just like human fingerprints."
+      },
+      {
+        q: "What was the first food eaten in space by John Glenn in 1962?",
+        qTh: "อาหารอย่างแรกที่มนุษย์อวกาศ จอห์น เกลนน์ กินบนอวกาศในปี 1962 คืออะไร?",
+        a: "Applesauce (from a tube)",
+        aTh: "ซอสแอปเปิลบด (บีบจากหลอด)",
+        factTh: "นักวิทยาศาสตร์เคยกลัวว่ามนุษย์จะกลืนอาหารในสภาพไร้แรงโน้มถ่วงไม่ได้ จึงให้ จอห์น เกลนน์ ทดลองบีบซอสแอปเปิลบดจากหลอดอะลูมิเนียมเข้าปากเป็นมื้อแรกในวงโคจรโลก!",
+        factEn: "Scientists weren't sure humans could swallow in zero gravity, so John Glenn tested eating applesauce squeezed from an aluminum toothpaste-style tube."
+      },
+      {
+        q: "In Ancient Greece, throwing what fruit at someone was considered a marriage proposal?",
+        qTh: "ในสมัยกรีกโบราณ การปาผลไม้ชนิดใดใส่คนที่ชอบ ถือเป็นการขอแต่งงาน?",
+        a: "An apple",
+        aTh: "ลูกแอปเปิล",
+        factTh: "ชาวกรีกโบราณยกให้แอปเปิลเป็นผลไม้ศักดิ์สิทธิ์ของเทพีอะโฟรไดท์ การโยนแอปเปิลให้ใครคือการสารภาพรัก และถ้าอีกฝ่ายรับไว้ได้ก็แปลว่า 'ตกลงแต่งงาน'!",
+        factEn: "Sacred to Aphrodite, tossing an apple at someone in Ancient Greece declared love—and catching it meant accepting the marriage proposal."
+      },
+      {
+        q: "What do cows have in terms of social friendships?",
+        qTh: "วัวมีพฤติกรรมทางสังคมเรื่องเพื่อนที่น่ารักอย่างไร?",
+        a: "They have best friends and get stressed when separated",
+        aTh: "วัวมี 'เพื่อนซี้' และจะเครียดถ้าถูกจับแยกจากเพื่อนสนิท",
+        factTh: "งานวิจัยพบว่าวัวจะเลือกจับคู่กับ 'เพื่อนซี้' ตัวโปรดในฝูง เมื่ออยู่ด้วยกันอัตราการเต้นของหัวใจจะสงบและมีความสุข แต่ถ้าโดนจับแยกจะร้องไห้และเครียดทันที!",
+        factEn: "Studies show cows form close bonds with chosen 'best friends,' showing significantly lower heart rates and cortisol levels when standing together."
+      },
+      {
+        q: "Which ocean is the saltiest ocean on Earth?",
+        qTh: "มหาสมุทรใดในโลกที่มีความเค็มมากที่สุด?",
+        a: "The Atlantic Ocean",
+        aTh: "มหาสมุทรแอตแลนติก",
+        factTh: "มหาสมุทรแอตแลนติกมีอัตราการระเหยของน้ำสูงและได้รับน้ำเค็มจัดจากทะเลเมดิเตอร์เรเนียนไหลมาสมทบ ทำให้มีความเค็มเฉลี่ยสูงกว่ามหาสมุทรแปซิฟิก!",
+        factEn: "High evaporation rates and salty inflow from the Mediterranean Sea make the Atlantic the saltiest of the world's major oceans."
+      },
+      {
+        q: "What did inventors originally call the computer mouse when it was created in 1964?",
+        qTh: "ผู้ประดิษฐ์ 'เมาส์คอมพิวเตอร์' ในปี 1964 ตั้งชื่อเรียกมันในสิทธิบัตรว่าอะไร?",
+        a: "X-Y Position Indicator for a Display System",
+        aTh: "ตัวระบุตำแหน่ง X-Y สำหรับระบบแสดงผล",
+        factTh: "Douglas Engelbart สร้างเมาส์ตัวแรกจากกล่องไม้ที่มีล้อโลหะ 2 ล้อ แต่เพราะสายไฟที่ยื่นออกมาด้านหลังดูเหมือนหางหนู ทีมงานจึงเรียกติดปากว่า 'เมาส์' จนถึงทุกวันนี้!",
+        factEn: "Patented under that clunky technical name, Douglas Engelbart's wooden prototype quickly earned the nickname 'mouse' because its cord looked like a tail."
+      },
+      {
+        q: "In Thailand, what unusual buffets are held annually in Lopburi province for local wildlife?",
+        qTh: "ที่จังหวัดลพบุรีของไทย มีการจัดงานเลี้ยงบุฟเฟต์ประจำปีสุดโด่งดังให้กับสัตว์ชนิดใด?",
+        a: "Macaque monkeys (The Lopburi Monkey Banquet)",
+        aTh: "ลิงแสม (เทศกาลโต๊ะจีนลิงลพบุรี)",
+        factTh: "จัดขึ้นทุกวันอาทิตย์สุดท้ายของเดือนพฤศจิกายน ณ พระปรางค์สามยอด ชาวบ้านจะจัดโต๊ะจีนผลไม้และขนมหวานกว่า 4 ตัน เพื่อขอบคุณฝูงลิงที่ดึงดูดนักท่องเที่ยวมาสู่เมือง!",
+        factEn: "Held every November at Phra Prang Sam Yot, locals lay out over four tons of fruit and treats to thank the macaques for bringing tourism to Lopburi."
+      },
+      {
+        q: "What color were the original Star Wars lightsaber props in the first 1977 movie before special effects were added?",
+        qTh: "ดาบไลท์เซเบอร์ในกองถ่ายหนัง Star Wars ภาคแรก (1977) จริงๆ แล้วแท่งไม้มีสีอะไร?",
+        a: "Silver / grey reflective tape (colors were painted frame-by-frame later)",
+        aTh: "สีเงินเทา (เอฟเฟกต์สีเรืองแสงถูกวาดทับทีละเฟรมทีหลัง)",
+        factTh: "ใบดาบในกองถ่ายเป็นแท่งหมุนได้ที่หุ้มด้วยเทปสะท้อนแสงสีเงิน เพื่อให้สะท้อนแสงไฟในฉาก จากนั้นทีมงานต้องนั่งวาดสีฟ้าและสีแดงทับลงบนฟิล์มทีละเฟรมด้วยมือ!",
+        factEn: "On set, the props were spinning rods covered in silver reflective tape; animators later hand-rotoscoped the glowing blue and red colors frame by frame."
+      },
+      {
+        q: "What is the only letter that does NOT appear in any US state name?",
+        qTh: "ตัวอักษรภาษาอังกฤษตัวเดียวที่ไม่ปรากฏอยู่ในชื่อรัฐใดๆ ของสหรัฐอเมริกาเลยคือตัวอะไร?",
+        a: "The letter Q",
+        aTh: "ตัวอักษร Q",
+        factTh: "ในบรรดาชื่อรัฐทั้ง 50 รัฐของอเมริกา มีตัวอักษรครบตั้งแต่ A ถึง Z ยกเว้นตัว 'Q' ตัวเดียวเท่านั้น (แม้แต่ตัว Z ก็มีใน Arizona และ X ก็มีใน Texas กับ New Mexico)!",
+        factEn: "Every single letter of the English alphabet appears in at least one of the 50 US state names except for the letter Q."
+      },
+      {
+        q: "How many times can a hummingbird flap its wings per second?",
+        qTh: "นกฮัมมิงเบิร์ดสามารถกระพือปีกได้เร็วสูงสุดกี่ครั้งต่อวินาที?",
+        a: "Up to 80 times per second",
+        aTh: "สูงสุดถึง 80 ครั้งต่อวินาที",
+        factTh: "นกฮัมมิงเบิร์ดกระพือปีกเร็วมากจนตาเปล่ามองเห็นเป็นภาพเบลอ และเกิดเสียงฮัมเบาๆ คล้ายเสียงผึ้ง (เป็นที่มาของชื่อ Hummingbird) แถมหัวใจเต้นเร็วถึง 1,200 ครั้งต่อนาที!",
+        factEn: "Flapping up to 80 beats per second creates the audible humming sound that gives the bird its name—and requires a heart rate over 1,200 bpm."
+      },
+      {
+        q: "Where does the English word 'cookie' come from?",
+        qTh: "อะไรคือที่มาของชื่อขนม 'คุกกี้' (Cookie) ในภาษาดัตช์?",
+        a: "Koekje, which means 'little cake'",
+        aTh: "มาจากคำว่า 'Koekje' ในภาษาดัตช์ ที่แปลว่า 'เค้กชิ้นเล็ก'",
+        factTh: "คนทำขนมปังชาวดัตช์สมัยก่อนจะตักแป้งเค้กก้อนเล็กๆ ใส่เตาอบเพื่อทดสอบความร้อนของเตาก่อนอบเค้กก้อนใหญ่ และเรียกชิ้นทดสอบนั้นว่า 'Koekje' (เค้กจิ๋ว)!",
+        factEn: "Dutch bakers used to drop tiny spoonfuls of cake batter into ovens to test the temperature before baking full cakes, calling the test morsels 'koekjes'."
+      },
+      {
+        q: "What do lobsters use to sense smells?",
+        qTh: "กุ้งล็อบสเตอร์ใช้อวัยวะส่วนไหนในการดมกลิ่น?",
+        a: "Their legs and antennae",
+        aTh: "ขาและหนวดของมัน",
+        factTh: "ตามปลายขาเดินและหนวดเล็กๆ ของล็อบสเตอร์มีขนรับกลิ่นขนาดจิ๋วนับแสนเส้น ทำให้มัน 'ดมกลิ่น' อาหารได้ทันทีที่เดินเหยียบผ่านพื้นทะเล!",
+        factEn: "Tiny chemosensory hairs lining a lobster's legs and antennules allow it to 'smell' food on the ocean floor simply by walking over it."
+      },
+      {
+        q: "Which country has more lakes than the rest of the world combined?",
+        qTh: "ประเทศใดมีจำนวนทะเลสาบมากกว่าประเทศอื่นๆ ทั้งโลกรวมกัน?",
+        a: "Canada (over 2 million lakes)",
+        aTh: "แคนาดา (มีทะเลสาบมากกว่า 2 ล้านแห่ง)",
+        factTh: "แคนาดามีทะเลสาบมากกว่า 2 ล้านแห่ง ซึ่งคิดเป็นประมาณ 60% ของทะเลสาบทั้งหมดบนโลกใบนี้ เกิดจากแผ่นน้ำแข็งยักษ์ในยุคน้ำแข็งกัดเซาะพื้นดินจนเป็นแอ่ง!",
+        factEn: "Carved by retreating Ice Age glaciers, Canada contains roughly 2 million lakes—accounting for over 60% of all lakes on Earth."
+      },
+      {
+        q: "What did the creators of Tom and Jerry originally name the famous cat and mouse in 1940?",
+        qTh: "ผู้สร้างการ์ตูน Tom & Jerry ตั้งชื่อคู่หูแมวกับหนูคู่นี้ในตอนแรกสุดว่าอะไร?",
+        a: "Jasper and Jinx",
+        aTh: "แจสเปอร์ กับ จิงซ์ (Jasper & Jinx)",
+        factTh: "ในการ์ตูนตอนแรกสุด 'Puss Gets the Boot' (1940) เจ้าแมวชื่อ Jasper และเจ้าหนูชื่อ Jinx ก่อนที่สตูดิโอ MGM จะจัดประกวดตั้งชื่อใหม่และผู้ชนะเสนอชื่อ 'Tom and Jerry'!",
+        factEn: "In their 1940 debut 'Puss Gets the Boot,' the duo were called Jasper and Jinx before an internal MGM studio contest renamed them Tom and Jerry."
+      },
+      {
+        q: "What happens if you cry in outer space?",
+        qTh: "จะเกิดอะไรขึ้นถ้าคุณร้องไห้ในอวกาศที่ไร้แรงโน้มถ่วง?",
+        a: "Tears don't fall; they form a liquid ball around your eyes",
+        aTh: "น้ำตาจะไม่ไหลหยดลงมา แต่จะเกาะรวมกันเป็นก้อนกลมๆ รอบดวงตา",
+        factTh: "เพราะไม่มีแรงโน้มถ่วงดึงน้ำตาให้ไหลลงแก้ม แรงตึงผิวของน้ำจะทำให้น้ำตาเกาะรวมตัวกันเป็นก้อนวุ้นใสๆ แปะติดอยู่รอบดวงตาจนกว่าคุณจะเอาผ้ามาซับออก!",
+        factEn: "Without gravity to pull tears down your cheeks, surface tension holds the liquid in a growing, wobbly bubble stuck right over your eye."
+      },
+      {
+        q: "In Australia, there is a pink lake called Lake Hillier. What gives it its bright bubblegum pink color?",
+        qTh: "ทะเลสาบฮิลเลียร์ในออสเตรเลียมีน้ำสีชมพูสดใสเหมือนหมากฝรั่ง เกิดจากอะไร?",
+        a: "Salt-loving microalgae and bacteria",
+        aTh: "สาหร่ายขนาดเล็กและแบคทีเรียที่ชอบความเค็ม",
+        factTh: "ทะเลสาบนี้เค็มจัดพอๆ กับทะเลสาบเดดซี สาหร่าย Dunaliella salina และแบคทีเรียสีชมพูที่อาศัยอยู่ในน้ำสร้างสารสีแดงออกมาเพื่อดูดซับแสงแดด และน้ำก็ปลอดภัยพอให้คนลงว่ายได้ด้วย!",
+        factEn: "High salinity fosters Dunaliella salina microalgae and halobacteria that produce red carotenoid pigments, turning the water permanently bubblegum pink."
+      },
+      {
+        q: "What animal has rectangular pupils in its eyes?",
+        qTh: "สัตว์ชนิดใดที่มีรูม่านตาเป็นรูปสี่เหลี่ยมผืนผ้าแนวนอน?",
+        a: "Goats (and sheep)",
+        aTh: "แพะ (และแกะ)",
+        factTh: "รูม่านตาสี่เหลี่ยมแนวนอนช่วยให้แพะมองเห็นภาพพาโนรามารอบตัวได้กว้างถึง 320-340 องศาโดยไม่ต้องหันหัว ทำให้คอยระวังนักล่าได้ตลอดเวลาแม้ตอนกำลังก้มหน้ากินหญ้า!",
+        factEn: "Horizontal rectangular pupils give grazing goats a 320-degree panoramic field of vision to spot predators from almost any direction while eating."
+      },
+      {
+        q: "What was Play-Doh originally invented and sold as in the 1930s?",
+        qTh: "ดินน้ำมันเด็กเล่น Play-Doh ถูกประดิษฐ์และขายในยุค 1930 เพื่อใช้ทำอะไรในตอนแรก?",
+        a: "Wallpaper cleaner (to scrub coal soot off walls)",
+        aTh: "น้ำยาเช็ดทำความสะอาดคราบเขม่าถ่านหินบนวอลเปเปอร์",
+        factTh: "สมัยก่อนบ้านเรือนใช้เตาผิงถ่านหินทำให้ผนังเปื้อนคราบเขม่าดำ ต่อมาคนเปลี่ยนมาใช้ฮีตเตอร์แก๊สจนน้ำยานี้เกือบเจ๊ง แต่หลานสาวของผู้ผลิตเอาไปให้เด็กอนุบาลปั้นเล่นจนฮิตทั่วโลก!",
+        factEn: "Originally sold to roll coal soot off wallpaper, it was reinvented in the 1950s after a nursery school teacher used the non-toxic putty for kids' crafts."
+      },
+      {
+        q: "How long is a 'jiffy' in actual scientific physics terms?",
+        qTh: "คำว่า 'Jiffy' (แวบเดียว) ในทางฟิสิกส์และคอมพิวเตอร์ มีค่าเวลาเท่ากับเท่าไหร่?",
+        a: "1/100th of a second (or time for light to travel 1 cm)",
+        aTh: "1 ใน 100 วินาที (หรือเวลาที่แสงเดินทางได้ 1 เซนติเมตร)",
+        factTh: "แม้คนทั่วไปจะพูดว่า 'รอแป๊บเดียว (in a jiffy)' แต่ในวงการฟิสิกส์เคมีและวิศวกรรมคอมพิวเตอร์ คำว่า Jiffy เป็นหน่วยวัดเวลาจริงๆ ที่สั้นระดับเสี้ยววินาที!",
+        factEn: "While used casually to mean 'a moment,' physicists and computer scientists formally define a jiffy as 1/100th of a second (or ~33 picoseconds in optics)."
+      },
+      {
+        q: "Which famous painter only sold ONE painting during his entire lifetime?",
+        qTh: "จิตรกรระดับโลกคนใดที่ขายภาพวาดของตัวเองได้เพียงแค่ 1 ภาพเท่านั้นตลอดชีวิต?",
+        a: "Vincent van Gogh",
+        aTh: "วินเซนต์ แวน โก๊ะ (Vincent van Gogh)",
+        factTh: "แวน โก๊ะ วาดภาพไว้กว่า 900 ภาพ แต่ขายได้แค่ภาพ 'The Red Vineyard' (ไร่องุ่นสีแดง) เพียงภาพเดียวในราคา 400 ฟรังก์ ก่อนที่ภาพของเขาจะมีมูลค่านับพันล้านบาทในยุคปัจจุบัน!",
+        factEn: "Despite creating over 900 paintings, Van Gogh famously sold only 'The Red Vineyard' during his life—months before his death in 1890."
+      },
+      {
+        q: "In Japan, what do people traditionally eat on Christmas Eve thanks to a 1974 marketing campaign?",
+        qTh: "ในญี่ปุ่น ผู้คนนิยมกินอะไรในคืนวันคริสต์มาสอีฟ จนกลายเป็นธรรมเนียมจากแคมเปญโฆษณาปี 1974?",
+        a: "KFC fried chicken",
+        aTh: "ไก่ทอด KFC",
+        factTh: "ในปี 1974 KFC ญี่ปุ่นออกแคมเปญ 'Kurisumasu ni wa Kentakkii!' (คริสต์มาสต้องเคนทักกี้!) จนทุกวันนี้คนญี่ปุ่นต้องจองชุดถังไก่ทอด KFC ล่วงหน้าเป็นเดือนๆ สำหรับวันคริสต์มาส!",
+        factEn: "KFC Japan's viral 1974 'Kentucky for Christmas' ad campaign turned fried chicken buckets into a holiday staple that families pre-order weeks ahead."
+      },
+      {
+        q: "What is the hardest natural substance in the human body?",
+        qTh: "ส่วนประกอบที่แข็งที่สุดในร่างกายมนุษย์คืออะไร?",
+        a: "Tooth enamel",
+        aTh: "สารเคลือบฟัน",
+        factTh: "สารเคลือบฟัน (Enamel) ประกอบด้วยแร่ธาตุแคลเซียมฟอสเฟตมากถึง 96% ทำให้แข็งแกร่งยิ่งกว่ากระดูกและแข็งเกือบเทียบเท่าเหล็กกล้าเลยทีเดียว!",
+        factEn: "Composed of 96% densely packed mineral crystals, tooth enamel is even harder than bone—though still vulnerable to acid erosion."
+      },
+      {
+        q: "What animal can sleep for up to 3 years at a time if the weather is too dry?",
+        qTh: "สัตว์ชนิดใดที่สามารถจำศีลหลับยาวได้นานถึง 3 ปีติดต่อกันหากสภาพอากาศแห้งแล้ง?",
+        a: "A snail",
+        aTh: "หอยทาก",
+        factTh: "หอยทากต้องการความชื้นเพื่อดำรงชีวิต หากเกิดภัยแล้งจัด มันจะหลบเข้าไปในเปลือกและสร้างเมือกแข็งปิดปากเปลือกไว้เพื่อจำศีลหลับยาวได้นานถึง 3 ปีจนกว่าฝนจะตก!",
+        factEn: "Because snails need moisture to survive, they seal themselves inside their shells with dried mucus and hibernate for up to three years during droughts."
+      },
+      {
+        q: "What organ of a sheep is traditionally used to cook Scotland's national dish, Haggis?",
+        qTh: "อาหารประจำชาติของสกอตแลนด์อย่าง 'แฮกกิส' (Haggis) ถูกนำไปหุงต้มในอวัยวะส่วนใดของแกะ?",
+        a: "A sheep's stomach",
+        aTh: "กระเพาะของแกะ",
+        factTh: "ชาวสกอตนำเครื่องในแกะสับผสมกับข้าวโอ๊ต หัวหอม และเครื่องเทศ แล้วยัดใส่ในกระเพาะแกะเพื่อต้มให้สุก (ปัจจุบันนิยมใช้ไส้เทียมสังเคราะห์แทนในร้านค้าทั่วไป)!",
+        factEn: "Traditional haggis is made by stuffing minced sheep's heart, liver, and lungs mixed with oatmeal and spices inside a sheep's stomach and simmering it."
+      },
+      {
+        q: "What is the only planet in our solar system named after a Greek god instead of a Roman god?",
+        qTh: "ดาวเคราะห์ดวงเดียวในระบบสุริยะที่ตั้งชื่อตามเทพเจ้ากรีก (แทนที่จะเป็นเทพเจ้าโรมันเหมือนดวงอื่น) คือดวงใด?",
+        a: "Uranus",
+        aTh: "ดาวยูเรนัส",
+        factTh: "ดาวเคราะห์ดวงอื่นตั้งชื่อตามเทพโรมันทั้งหมด (เช่น ดาวอังคาร Mars, ดาวพฤหัส Jupiter) ยกเว้นดาวยูเรนัสที่ตั้งชื่อตาม 'อูรานอส' (Ouranos) เทพเจ้าแห่งท้องฟ้าของกรีกโบราณ!",
+        factEn: "While Mercury, Venus, Mars, Jupiter, Saturn, and Neptune honor Roman deities, Uranus is named after Ouranos, the ancient Greek god of the sky."
+      }
+    ];
+
+    /**
+     * Avatar emojis for players to give each card personality
+     */
+    const FISH_AVATARS = ["🐠", "🐡", "🦈", "🐙", "🦑", "🦀", "🦞", "🐬", "🐳", "🐢"];
+
+    /**
+     * Global Game State
+     */
+    const gameState = {
+      players: [
+        { id: 1, name: "Player 1", score: 0, avatar: "🐠" },
+        { id: 2, name: "Player 2", score: 0, avatar: "🐡" },
+        { id: 3, name: "Player 3", score: 0, avatar: "🐙" },
+        { id: 4, name: "Player 4", score: 0, avatar: "🦀" }
+      ],
+      totalRounds: 5,
+      currentRound: 1,
+      questionsDeck: [...DEFAULT_QUESTIONS],
+      usedQuestionIndices: new Set(),
+      soundEnabled: true,
+
+      // Per-Round State
+      roundData: {
+        question: null,
+        guesserId: null,
+        blueFishId: null,
+        suspects: [], // Array of { playerId, name, avatar, role: 'BLUE_FISH' | 'RED_HERRING', eliminated: false }
+        revealQueue: [],
+        revealIndex: 0,
+        streak: 0,
+        roundEnded: false
+      }
+    };
+
+    /**
+     * Sound Effects Engine using Tone.js (Zero external audio files needed)
+     */
+    const SFX = {
+      synth: null,
+      init() {
+        if (!this.synth && typeof Tone !== 'undefined') {
+          this.synth = new Tone.PolySynth(Tone.Synth).toDestination();
+          this.synth.volume.value = -8;
+        }
+      },
+      play(type) {
+        if (!gameState.soundEnabled) return;
+        try {
+          if (Tone.context.state !== 'running') {
+            Tone.start();
+          }
+          this.init();
+          if (!this.synth) return;
+
+          const now = Tone.now();
+          if (type === 'click') {
+            this.synth.triggerAttackRelease("C5", "32n", now);
+          } else if (type === 'reveal') {
+            this.synth.triggerAttackRelease(["E4", "G4", "B4"], "16n", now);
+          } else if (type === 'herring') {
+            // Cheerful ascending chime
+            this.synth.triggerAttackRelease("C5", "16n", now);
+            this.synth.triggerAttackRelease("E5", "16n", now + 0.08);
+            this.synth.triggerAttackRelease("G5", "8n", now + 0.16);
+          } else if (type === 'bluefish') {
+            // Dramatic descending buzzer
+            this.synth.triggerAttackRelease(["Eb4", "A3"], "8n", now);
+            this.synth.triggerAttackRelease(["D4", "Ab3"], "4n", now + 0.18);
+          } else if (type === 'bank') {
+            // Coin / victory fanfare
+            this.synth.triggerAttackRelease("G4", "16n", now);
+            this.synth.triggerAttackRelease("C5", "16n", now + 0.08);
+            this.synth.triggerAttackRelease("E5", "16n", now + 0.16);
+            this.synth.triggerAttackRelease("G5", "4n", now + 0.24);
+          }
+        } catch (e) {
+          // Fail silently if audio context blocked
+        }
+      }
+    };
+
+    /**
+     * Initialize Background Bubbles & Setup Screen
+     */
+    window.onload = function () {
+      createBubbles();
+      renderPlayerList();
+      updateDeckBadge();
+    };
+
+    function createBubbles() {
+      const container = document.getElementById('bubbles-container');
+      const count = 16;
+      for (let i = 0; i < count; i++) {
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        const size = Math.random() * 28 + 10;
+        bubble.style.width = `${size}px`;
+        bubble.style.height = `${size}px`;
+        bubble.style.left = `${Math.random() * 100}vw`;
+        bubble.style.animationDuration = `${Math.random() * 10 + 8}s`;
+        bubble.style.animationDelay = `${Math.random() * 8}s`;
+        container.appendChild(bubble);
+      }
+    }
+
+    /**
+     * Toast Notification System (Replaces alert())
+     */
+    let toastTimeout = null;
+    function showToast(message, variant = 'info') {
+      const banner = document.getElementById('toast-banner');
+      const content = document.getElementById('toast-content');
+
+      const styles = {
+        info: 'bg-slate-900/95 border-cyan-400/50 text-cyan-200',
+        success: 'bg-emerald-950/95 border-emerald-400/60 text-emerald-200',
+        error: 'bg-rose-950/95 border-rose-400/60 text-rose-200',
+        warning: 'bg-amber-950/95 border-amber-400/60 text-amber-200'
+      };
+
+      content.className = `px-5 py-3 rounded-2xl shadow-2xl border font-medium text-sm flex items-center gap-2.5 backdrop-blur-md ${styles[variant] || styles.info}`;
+      content.textContent = message;
+
+      banner.classList.remove('hidden');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        banner.classList.add('hidden');
+      }, 3000);
+    }
+
+    /**
+     * Screen Navigation Helper
+     */
+    function showScreen(screenId) {
+      const screens = ['screen-setup', 'screen-reveal', 'screen-board', 'screen-summary', 'screen-gameover'];
+      screens.forEach(id => {
+        document.getElementById(id).classList.add('hidden');
+      });
+      document.getElementById(screenId).classList.remove('hidden');
+
+      // Show score button in header only during active game screens
+      const inGame = ['screen-reveal', 'screen-board', 'screen-summary'].includes(screenId);
+      const scoresBtn = document.getElementById('header-scores-btn');
+      if (inGame) {
+        scoresBtn.classList.remove('hidden');
+      } else {
+        scoresBtn.classList.add('hidden');
+      }
+    }
+
+    /**
+     * Modal Helpers
+     */
+    function openModal(modalId) {
+      SFX.play('click');
+      if (modalId === 'scoreboard-modal') {
+        renderModalScoreboard();
+      }
+      document.getElementById(modalId).classList.remove('hidden');
+    }
+
+    function closeModal(modalId) {
+      SFX.play('click');
+      document.getElementById(modalId).classList.add('hidden');
+    }
+
+    function toggleSound() {
+      gameState.soundEnabled = !gameState.soundEnabled;
+      document.getElementById('sound-icon').textContent = gameState.soundEnabled ? '🔊' : '🔇';
+      if (gameState.soundEnabled) SFX.play('click');
+    }
+
+    function confirmReturnHome() {
+      const setupVisible = !document.getElementById('screen-setup').classList.contains('hidden');
+      if (setupVisible) return;
+      openModal('confirm-exit-modal');
+    }
+
+    /**
+     * ==========================================
+     * SETUP SCREEN FUNCTIONS
+     * ==========================================
+     */
+    function renderPlayerList() {
+      const list = document.getElementById('player-list');
+      document.getElementById('player-count').textContent = gameState.players.length;
+      list.innerHTML = '';
+
+      gameState.players.forEach((player, idx) => {
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between bg-slate-900/90 border border-slate-800 px-3.5 py-2.5 rounded-xl';
+        row.innerHTML = `
+          <div class="flex items-center gap-2.5 flex-1">
+            <span class="text-xl">${player.avatar}</span>
+            <input
+              type="text"
+              value="${escapeHtml(player.name)}"
+              maxlength="18"
+              onchange="updatePlayerName(${player.id}, this.value)"
+              class="bg-transparent text-white font-semibold text-sm focus:outline-none focus:bg-slate-800 px-2 py-1 rounded-lg w-full"
+            />
+          </div>
+          ${gameState.players.length > 3 ? `
+            <button onclick="removePlayer(${player.id})" title="Remove player" class="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg transition text-xs font-bold">
+              ✕
+            </button>
+          ` : `<span class="text-[11px] text-slate-600 px-2">Min</span>`}
+        `;
+        list.appendChild(row);
+      });
+    }
+
+    function handleAddPlayer(e) {
+      e.preventDefault();
+      const input = document.getElementById('new-player-input');
+      const name = input.value.trim();
+
+      if (!name) {
+        showToast("Please enter a player name!", "warning");
+        return;
+      }
+      if (gameState.players.length >= 10) {
+        showToast("Maximum 10 players allowed!", "error");
+        return;
+      }
+
+      SFX.play('click');
+      const nextId = Date.now();
+      const avatar = FISH_AVATARS[gameState.players.length % FISH_AVATARS.length];
+      gameState.players.push({ id: nextId, name, score: 0, avatar });
+      input.value = '';
+      renderPlayerList();
+    }
+
+    function updatePlayerName(id, newName) {
+      const clean = newName.trim();
+      const player = gameState.players.find(p => p.id === id);
+      if (player && clean) {
+        player.name = clean;
+      } else {
+        renderPlayerList();
+      }
+    }
+
+    function removePlayer(id) {
+      if (gameState.players.length <= 3) {
+        showToast("You need at least 3 players!", "warning");
+        return;
+      }
+      SFX.play('click');
+      gameState.players = gameState.players.filter(p => p.id !== id);
+      renderPlayerList();
+    }
+
+    function selectRounds(num) {
+      SFX.play('click');
+      gameState.totalRounds = num;
+      document.querySelectorAll('.round-btn').forEach(btn => {
+        const r = parseInt(btn.dataset.rounds, 10);
+        if (r === num) {
+          btn.className = 'round-btn py-2.5 rounded-xl font-game font-bold text-base border transition bg-amber-500 border-amber-300 text-slate-950 shadow-lg';
+        } else {
+          btn.className = 'round-btn py-2.5 rounded-xl font-game font-bold text-base border transition bg-slate-900 border-slate-700 text-slate-300 hover:border-amber-400';
+        }
+      });
+    }
+
+    function updateDeckBadge() {
+      document.getElementById('deck-count-badge').textContent = `${gameState.questionsDeck.length} Questions`;
+    }
+
+    function handleAddCustomQuestion(e) {
+      e.preventDefault();
+      const qThInput = document.getElementById('custom-q-th-input');
+      const qInput = document.getElementById('custom-q-input');
+      const aThInput = document.getElementById('custom-a-th-input');
+      const aInput = document.getElementById('custom-a-input');
+      const factThInput = document.getElementById('custom-fact-th-input');
+      const factEnInput = document.getElementById('custom-fact-en-input');
+
+      const qTh = qThInput.value.trim();
+      const q = qInput.value.trim() || qTh;
+      const aTh = aThInput.value.trim();
+      const a = aInput.value.trim() || aTh;
+      const factTh = factThInput.value.trim() || "คำถามพิเศษที่สร้างโดยผู้เล่นในวง!";
+      const factEn = factEnInput.value.trim() || "Custom trivia question added by your group!";
+
+      if (!qTh || !aTh) return;
+
+      gameState.questionsDeck.push({ q, qTh, a, aTh, factTh, factEn });
+      qThInput.value = '';
+      qInput.value = '';
+      aThInput.value = '';
+      aInput.value = '';
+      factThInput.value = '';
+      factEnInput.value = '';
+      updateDeckBadge();
+      closeModal('custom-question-modal');
+      SFX.play('herring');
+      showToast("เพิ่มคำถามพร้อมเกร็ดความรู้ลงในกองเรียบร้อย! (Added to deck)", "success");
+    }
+
+    /**
+     * ==========================================
+     * GAME START & ROUND SETUP
+     * ==========================================
+     */
+    function startGame() {
+      if (gameState.players.length < 3) {
+        showToast("Add at least 3 players to start!", "error");
+        return;
+      }
+
+      SFX.play('bank');
+      gameState.currentRound = 1;
+      gameState.usedQuestionIndices.clear();
+      gameState.players.forEach(p => { p.score = 0; });
+
+      setupRound();
+    }
+
+    function getNextQuestion() {
+      if (gameState.usedQuestionIndices.size >= gameState.questionsDeck.length) {
+        gameState.usedQuestionIndices.clear();
+      }
+      let idx;
+      do {
+        idx = Math.floor(Math.random() * gameState.questionsDeck.length);
+      } while (gameState.usedQuestionIndices.has(idx));
+
+      gameState.usedQuestionIndices.add(idx);
+      return gameState.questionsDeck[idx];
+    }
+
+    function setupRound() {
+      const question = getNextQuestion();
+
+      // Rotate Guesser fairly each round (with a randomized starting offset on round 1)
+      const guesserIndex = (gameState.currentRound - 1) % gameState.players.length;
+      const guesser = gameState.players[guesserIndex];
+
+      // Remaining players become Suspects (1 Blue Fish, rest Red Herrings)
+      const nonGuessers = gameState.players.filter(p => p.id !== guesser.id);
+      const blueFishIndex = Math.floor(Math.random() * nonGuessers.length);
+      const blueFishPlayer = nonGuessers[blueFishIndex];
+
+      const suspects = nonGuessers.map(p => ({
+        playerId: p.id,
+        name: p.name,
+        avatar: p.avatar,
+        role: p.id === blueFishPlayer.id ? 'BLUE_FISH' : 'RED_HERRING',
+        eliminated: false
+      }));
+
+      // Build pass-and-play reveal order (everyone in table order)
+      const revealQueue = gameState.players.map(p => {
+        if (p.id === guesser.id) {
+          return { player: p, role: 'GUESSER' };
+        } else if (p.id === blueFishPlayer.id) {
+          return { player: p, role: 'BLUE_FISH' };
+        } else {
+          return { player: p, role: 'RED_HERRING' };
+        }
+      });
+
+      gameState.roundData = {
+        question,
+        guesserId: guesser.id,
+        blueFishId: blueFishPlayer.id,
+        suspects,
+        revealQueue,
+        revealIndex: 0,
+        streak: 0,
+        roundEnded: false
+      };
+
+      renderRevealPassScreen();
+      showScreen('screen-reveal');
+    }
+
+    /**
+     * ==========================================
+     * PASS & PLAY SECRET REVEAL PHASE
+     * ==========================================
+     */
+    function renderRevealPassScreen() {
+      const { revealQueue, revealIndex } = gameState.roundData;
+      const currentItem = revealQueue[revealIndex];
+
+      document.getElementById('reveal-round-num').textContent = gameState.currentRound;
+      document.getElementById('reveal-total-rounds').textContent = gameState.totalRounds;
+      document.getElementById('pass-player-name').textContent = `${currentItem.player.avatar} ${currentItem.player.name}`;
+      document.getElementById('reveal-step-current').textContent = revealIndex + 1;
+      document.getElementById('reveal-step-total').textContent = revealQueue.length;
+
+      document.getElementById('reveal-pass-card').classList.remove('hidden');
+      document.getElementById('reveal-secret-card').classList.add('hidden');
+    }
+
+    function revealCurrentPlayerRole() {
+      SFX.play('reveal');
+      const { revealQueue, revealIndex, question } = gameState.roundData;
+      const currentItem = revealQueue[revealIndex];
+
+      document.getElementById('secret-player-name').textContent = currentItem.player.name;
+      document.getElementById('secret-question-th').textContent = question.qTh || question.q;
+      document.getElementById('secret-question-text').textContent = question.q;
+
+      const card = document.getElementById('reveal-secret-card');
+      const badge = document.getElementById('role-badge-container');
+      const emoji = document.getElementById('role-emoji');
+      const title = document.getElementById('role-title');
+      const subtitle = document.getElementById('role-subtitle');
+      const instrBox = document.getElementById('secret-instruction-box');
+
+      if (currentItem.role === 'GUESSER') {
+        card.className = 'bg-slate-900/90 backdrop-blur-md border-2 border-amber-400/50 rounded-3xl p-6 sm:p-8 text-center shadow-2xl max-w-xl mx-auto w-full';
+        badge.className = 'my-4 p-5 rounded-2xl border-2 bg-amber-500/15 border-amber-400/40 text-amber-200';
+        emoji.textContent = '🕵️';
+        title.textContent = 'YOU ARE THE GUESSER! (คนทาย)';
+        title.className = 'text-xl sm:text-3xl font-bold uppercase tracking-wide mb-1 text-amber-300';
+        subtitle.textContent = 'จับผิดคนโกหก และอย่าเผลอคัดคำตอบจริงออก!';
+
+        instrBox.className = 'rounded-2xl p-4 sm:p-5 mb-6 text-left border bg-amber-950/40 border-amber-500/30 text-amber-100';
+        instrBox.innerHTML = `
+          <div class="text-xs font-bold uppercase tracking-wider text-amber-400 mb-1">ภารกิจของคุณ (Your Mission)</div>
+          <p class="text-sm leading-relaxed">
+            ฟังคำตอบจากเพื่อนทุกคนให้ดี! <strong>มีเพียง 1 คนเท่านั้นที่รู้คำตอบจริง (Blue Fish)</strong> ส่วนคนอื่นๆ กำลังปั้นน้ำเป็นตัว (Red Herring) จงจิ้มคัดคนที่คิดว่าโกหกออกทีละคน!
+          </p>
+        `;
+      } else if (currentItem.role === 'BLUE_FISH') {
+        card.className = 'bg-slate-900/90 backdrop-blur-md border-2 border-cyan-400/60 rounded-3xl p-6 sm:p-8 text-center shadow-2xl max-w-xl mx-auto w-full';
+        badge.className = 'my-4 p-5 rounded-2xl border-2 bg-cyan-500/20 border-cyan-400/50 text-cyan-100';
+        emoji.textContent = '🐟';
+        title.textContent = 'BLUE FISH (คำตอบจริง!)';
+        title.className = 'text-xl sm:text-3xl font-bold uppercase tracking-wide mb-1 text-cyan-300';
+        subtitle.textContent = 'คุณคือคนเดียวที่รู้ความจริง!';
+
+        instrBox.className = 'rounded-2xl p-4 sm:p-5 mb-6 text-left border bg-cyan-950/70 border-cyan-400/60 shadow-inner';
+        instrBox.innerHTML = `
+          <div class="text-xs font-bold uppercase tracking-wider text-cyan-300 mb-1.5">✅ คำตอบจริงของคุณ (อ่านให้เนียน!):</div>
+          <p class="text-xl sm:text-2xl font-bold text-white leading-snug mb-1">${escapeHtml(question.aTh || question.a)}</p>
+          <p class="text-xs sm:text-sm font-medium text-cyan-200/80 mb-3">(${escapeHtml(question.a)})</p>
+          <p class="text-xs text-cyan-100/90 bg-cyan-900/50 p-2.5 rounded-xl border border-cyan-500/30">
+            💡 <strong>ทริค:</strong> ถ้าคนทายเผลอจิ้มคัดคุณออก คุณจะได้ <strong>+2 คะแนน</strong>! พยายามพูดให้ดูมีพิรุธนิดๆ หรือเนียนให้คนทายสับสน!
+          </p>
+        `;
+      } else {
+        card.className = 'bg-slate-900/90 backdrop-blur-md border-2 border-rose-500/60 rounded-3xl p-6 sm:p-8 text-center shadow-2xl max-w-xl mx-auto w-full';
+        badge.className = 'my-4 p-5 rounded-2xl border-2 bg-rose-500/20 border-rose-400/50 text-rose-100';
+        emoji.textContent = '🐡';
+        title.textContent = 'RED HERRING (สายบลัฟ!)';
+        title.className = 'text-xl sm:text-3xl font-bold uppercase tracking-wide mb-1 text-rose-400';
+        subtitle.textContent = 'แต่งเรื่องโกหกให้เนียนที่สุด!';
+
+        instrBox.className = 'rounded-2xl p-4 sm:p-5 mb-6 text-left border bg-rose-950/50 border-rose-500/40';
+        instrBox.innerHTML = `
+          <div class="text-xs font-bold uppercase tracking-wider text-rose-300 mb-1">🤥 ภารกิจปั้นน้ำเป็นตัว:</div>
+          <p class="text-sm text-rose-100 leading-relaxed">
+            คิดคำตอบปลอมๆ ที่ฟังดูน่าเชื่อถือขึ้นมาสดๆ! หลอกคนทายให้เชื่อว่า <strong>คำตอบของคุณคือเรื่องจริง</strong> เพื่อไม่ให้โดนคัดออก (รอดจนจบรับ +1 คะแนน!)
+          </p>
+        `;
+      }
+
+      const isLast = revealIndex === revealQueue.length - 1;
+      document.getElementById('hide-pass-btn').textContent = isLast
+        ? '🎯 เริ่มรอบจับผิด! (Start Round)'
+        : '🙈 ซ่อนและส่งเครื่องต่อ (Hide & Pass)';
+
+      document.getElementById('reveal-pass-card').classList.add('hidden');
+      document.getElementById('reveal-secret-card').classList.remove('hidden');
+    }
+
+    function hideAndPassNext() {
+      SFX.play('click');
+      gameState.roundData.revealIndex++;
+      if (gameState.roundData.revealIndex < gameState.roundData.revealQueue.length) {
+        renderRevealPassScreen();
+      } else {
+        startInterrogationBoard();
+      }
+    }
+
+    /**
+     * ==========================================
+     * INTERROGATION & ELIMINATION BOARD PHASE
+     * ==========================================
+     */
+    function startInterrogationBoard() {
+      const { question, guesserId, suspects } = gameState.roundData;
+      const guesser = gameState.players.find(p => p.id === guesserId);
+      const totalHerrings = suspects.filter(s => s.role === 'RED_HERRING').length;
+
+      document.getElementById('board-round-num').textContent = gameState.currentRound;
+      document.getElementById('board-total-rounds').textContent = gameState.totalRounds;
+      document.getElementById('board-guesser-name').textContent = `${guesser.avatar} ${guesser.name}`;
+      document.getElementById('board-guesser-instruction').textContent = guesser.name;
+      document.getElementById('board-question-th').textContent = question.qTh || question.q;
+      document.getElementById('board-question-text').textContent = question.q;
+
+      document.getElementById('herrings-total').textContent = totalHerrings;
+      updateBoardControls();
+      renderSuspectCards();
+
+      showScreen('screen-board');
+    }
+
+    function renderSuspectCards() {
+      const grid = document.getElementById('suspects-grid');
+      grid.innerHTML = '';
+
+      gameState.roundData.suspects.forEach((suspect, index) => {
+        const isBlue = suspect.role === 'BLUE_FISH';
+
+        const cardWrapper = document.createElement('div');
+        cardWrapper.id = `suspect-card-${index}`;
+        cardWrapper.className = `perspective-1000 h-44 sm:h-52 cursor-pointer select-none ${suspect.eliminated ? 'card-flipped' : ''}`;
+        cardWrapper.onclick = () => handleEliminateSuspect(index);
+
+        cardWrapper.innerHTML = `
+          <div class="card-inner">
+            <!-- FRONT OF CARD (Unflipped Suspect) -->
+            <div class="card-front bg-gradient-to-b from-slate-800 to-slate-900 border-2 border-cyan-500/40 hover:border-cyan-300 shadow-xl p-4 flex flex-col items-center justify-between transition">
+              <div class="w-full flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-cyan-400/80">
+                <span>Suspect #${index + 1}</span>
+                <span>❓</span>
+              </div>
+
+              <div class="text-4xl sm:text-5xl my-1">${suspect.avatar}</div>
+
+              <div class="w-full">
+                <div class="font-game font-bold text-base sm:text-lg text-white truncate">${escapeHtml(suspect.name)}</div>
+                <div class="mt-1.5 py-1 px-2.5 rounded-lg bg-rose-500/20 border border-rose-400/30 text-rose-300 text-[11px] font-bold uppercase tracking-wide">
+                  Tap to Eliminate
+                </div>
+              </div>
+            </div>
+
+            <!-- BACK OF CARD (Revealed Role) -->
+            <div class="card-back ${isBlue
+              ? 'bg-gradient-to-b from-cyan-600 to-blue-800 border-2 border-cyan-300'
+              : 'bg-gradient-to-b from-rose-600 to-red-900 border-2 border-rose-300'
+            } shadow-xl p-4 flex flex-col items-center justify-between text-white">
+              <div class="text-[10px] font-bold uppercase tracking-widest opacity-90">
+                ${escapeHtml(suspect.name)}
+              </div>
+
+              <div class="text-4xl sm:text-5xl">
+                ${isBlue ? '🐟' : '🐡'}
+              </div>
+
+              <div>
+                <div class="font-game font-bold text-base sm:text-lg uppercase tracking-wide">
+                  ${isBlue ? 'BLUE FISH!' : 'RED HERRING!'}
+                </div>
+                <div class="text-[11px] font-semibold opacity-90">
+                  ${isBlue ? 'Oh no! True Answer!' : 'Fake Caught! (+1 Pt)'}
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        grid.appendChild(cardWrapper);
+      });
+    }
+
+    function handleEliminateSuspect(index) {
+      if (gameState.roundData.roundEnded) return;
+
+      const suspect = gameState.roundData.suspects[index];
+      if (suspect.eliminated) return;
+
+      suspect.eliminated = true;
+      const cardEl = document.getElementById(`suspect-card-${index}`);
+      if (cardEl) {
+        cardEl.classList.add('card-flipped');
+      }
+
+      if (suspect.role === 'RED_HERRING') {
+        // Caught a fake!
+        SFX.play('herring');
+        gameState.roundData.streak += 1;
+        updateBoardControls();
+
+        const totalHerrings = gameState.roundData.suspects.filter(s => s.role === 'RED_HERRING').length;
+        if (gameState.roundData.streak === totalHerrings) {
+          // Guesser caught ALL Red Herrings! Automatic Perfect Sweep!
+          gameState.roundData.roundEnded = true;
+          showToast("🎉 PERFECT SWEEP! All Red Herrings caught!", "success");
+          setTimeout(() => {
+            finishRound('PERFECT_SWEEP');
+          }, 1300);
+        } else {
+          showToast(`🐡 Caught ${suspect.name}'s bluff! +1 pt streak!`, "success");
+        }
+      } else {
+        // Eliminated the Blue Fish! BUST!
+        SFX.play('bluefish');
+        gameState.roundData.roundEnded = true;
+        if (cardEl) cardEl.classList.add('animate-shake');
+        showToast(`🐟 OH NO! ${suspect.name} had the TRUE answer!`, "error");
+
+        setTimeout(() => {
+          finishRound('BUST_BLUE_FISH');
+        }, 1500);
+      }
+    }
+
+    function updateBoardControls() {
+      const { streak, suspects } = gameState.roundData;
+      const totalHerrings = suspects.filter(s => s.role === 'RED_HERRING').length;
+
+      document.getElementById('streak-points').textContent = streak;
+      document.getElementById('herrings-caught').textContent = streak;
+      document.getElementById('herrings-total').textContent = totalHerrings;
+      document.getElementById('bank-btn-amount').textContent = streak;
+
+      const bankBtn = document.getElementById('bank-points-btn');
+      bankBtn.disabled = streak === 0 || gameState.roundData.roundEnded;
+    }
+
+    function bankPointsAndEndRound() {
+      if (gameState.roundData.roundEnded || gameState.roundData.streak === 0) return;
+      SFX.play('bank');
+      gameState.roundData.roundEnded = true;
+      finishRound('BANKED');
+    }
+
+    /**
+     * ==========================================
+     * SCORING & ROUND SUMMARY
+     * ==========================================
+     */
+    function finishRound(outcomeType) {
+      const { guesserId, blueFishId, suspects, streak, question } = gameState.roundData;
+      const guesser = gameState.players.find(p => p.id === guesserId);
+      const blueFish = gameState.players.find(p => p.id === blueFishId);
+
+      // Track points awarded this round: map playerId -> { delta, reason }
+      const roundAwards = {};
+      gameState.players.forEach(p => {
+        roundAwards[p.id] = { player: p, delta: 0, reason: 'Eliminated' };
+      });
+
+      const banner = document.getElementById('summary-outcome-banner');
+      const emoji = document.getElementById('summary-emoji');
+      const title = document.getElementById('summary-title');
+      const subtitle = document.getElementById('summary-subtitle');
+
+      document.getElementById('summary-round-num').textContent = gameState.currentRound;
+      document.getElementById('summary-total-rounds').textContent = gameState.totalRounds;
+
+      if (outcomeType === 'BANKED') {
+        // Guesser banks their streak; surviving Red Herrings get +1 pt for fooling the Guesser!
+        roundAwards[guesser.id] = { player: guesser, delta: streak, reason: `Banked ${streak} caught fake(s)` };
+
+        suspects.forEach(s => {
+          if (s.role === 'RED_HERRING' && !s.eliminated) {
+            roundAwards[s.playerId] = { player: roundAwards[s.playerId].player, delta: 1, reason: 'Survived uneliminated!' };
+          } else if (s.role === 'BLUE_FISH') {
+            roundAwards[s.playerId] = { player: roundAwards[s.playerId].player, delta: 1, reason: 'Truth survived safely (+1)' };
+          }
+        });
+
+        banner.className = 'text-center p-5 rounded-2xl mb-6 border bg-amber-500/15 border-amber-400/40 text-amber-100';
+        emoji.textContent = '💰';
+        title.textContent = `${guesser.name} Banked ${streak} Point${streak > 1 ? 's' : ''}!`;
+        subtitle.textContent = 'Safe play! Surviving Red Herrings also earn +1 pt each.';
+
+      } else if (outcomeType === 'PERFECT_SWEEP') {
+        // Guesser caught EVERY Red Herring! Guesser gets streak + 1 bonus, Blue Fish gets +2 bonus!
+        const guesserTotal = streak + 1;
+        roundAwards[guesser.id] = { player: guesser, delta: guesserTotal, reason: `Caught all ${streak} fakes + 1 Sweep Bonus!` };
+        roundAwards[blueFish.id] = { player: blueFish, delta: 2, reason: 'Blue Fish untouched bonus!' };
+
+        banner.className = 'text-center p-5 rounded-2xl mb-6 border bg-emerald-500/20 border-emerald-400/50 text-emerald-100';
+        emoji.textContent = '🏆';
+        title.textContent = 'PERFECT SWEEP!';
+        subtitle.textContent = `${guesser.name} eliminated every single liar and left the truth untouched!`;
+
+      } else if (outcomeType === 'BUST_BLUE_FISH') {
+        // Guesser eliminated the Blue Fish! Guesser gets 0; Blue Fish gets +2; surviving Red Herrings get +1
+        roundAwards[guesser.id] = { player: guesser, delta: 0, reason: 'Eliminated the Blue Fish (0 pts)' };
+        roundAwards[blueFish.id] = { player: blueFish, delta: 2, reason: 'Fooled the Guesser into picking the truth!' };
+
+        suspects.forEach(s => {
+          if (s.role === 'RED_HERRING' && !s.eliminated) {
+            roundAwards[s.playerId] = { player: roundAwards[s.playerId].player, delta: 1, reason: 'Survived uneliminated!' };
+          }
+        });
+
+        banner.className = 'text-center p-5 rounded-2xl mb-6 border bg-rose-500/20 border-rose-400/50 text-rose-100';
+        emoji.textContent = '💥';
+        title.textContent = `BUSTED! ${guesser.name} Hit the Blue Fish!`;
+        subtitle.textContent = `${blueFish.name} had the real answer and steals +2 pts!`;
+      }
+
+      // Apply round points to each player's total score
+      Object.values(roundAwards).forEach(entry => {
+        entry.player.score += entry.delta;
+      });
+
+      // Populate Real Answer Box & Reality Check Backstory
+      document.getElementById('summary-blue-fish-player').textContent = `${blueFish.avatar} ${blueFish.name}`;
+      document.getElementById('roast-player-name').textContent = blueFish.name;
+      document.getElementById('summary-real-answer-th').textContent = question.aTh || question.a;
+      document.getElementById('summary-real-answer').textContent = `(${question.a})`;
+      document.getElementById('summary-fact-th').textContent = question.factTh || "ความจริงสุดแปลกที่ซ่อนอยู่เบื้องหลังคำตอบนี้!";
+      document.getElementById('summary-fact-en').textContent = question.factEn || "Compare how close the Blue Fish's explanation was to the real fact!";
+
+      // Reset interactive table verdict state for the new round summary
+      const reactionBanner = document.getElementById('verdict-reaction-banner');
+      reactionBanner.classList.add('hidden');
+      reactionBanner.textContent = '';
+      document.getElementById('verdict-nailed-btn').classList.remove('ring-2', 'ring-emerald-300', 'bg-emerald-500/45');
+      document.getElementById('verdict-butchered-btn').classList.remove('ring-2', 'ring-rose-300', 'bg-rose-500/45');
+
+      // Render Breakdown List
+      const pointsList = document.getElementById('summary-points-list');
+      pointsList.innerHTML = '';
+
+      Object.values(roundAwards)
+        .sort((a, b) => b.delta - a.delta)
+        .forEach(entry => {
+          const row = document.createElement('div');
+          row.className = 'flex items-center justify-between bg-slate-950/70 border border-slate-800 px-4 py-2.5 rounded-xl';
+          row.innerHTML = `
+            <div class="flex items-center gap-2.5">
+              <span class="text-xl">${entry.player.avatar}</span>
+              <div>
+                <div class="text-sm font-bold text-white">${escapeHtml(entry.player.name)}</div>
+                <div class="text-[11px] text-slate-400">${entry.reason}</div>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="font-game font-bold text-base ${entry.delta > 0 ? 'text-emerald-400' : 'text-slate-500'}">
+                +${entry.delta} pt${entry.delta === 1 ? '' : 's'}
+              </span>
+              <div class="text-[10px] text-slate-400">Total: ${entry.player.score}</div>
+            </div>
+          `;
+          pointsList.appendChild(row);
+        });
+
+      const nextBtn = document.getElementById('next-round-btn');
+      if (gameState.currentRound >= gameState.totalRounds) {
+        nextBtn.textContent = '👑 View Final Podium';
+      } else {
+        nextBtn.textContent = `Start Round ${gameState.currentRound + 1} ➡️`;
+      }
+
+      showScreen('screen-summary');
+    }
+
+    /**
+     * Interactive End-of-Round Table Verdict Gimmick (Roast or Praise the Blue Fish)
+     */
+    function castBlueFishVerdict(type) {
+      const { blueFishId } = gameState.roundData;
+      const blueFish = gameState.players.find(p => p.id === blueFishId);
+      const playerName = blueFish ? blueFish.name : "Blue Fish";
+
+      const nailedBtn = document.getElementById('verdict-nailed-btn');
+      const butcheredBtn = document.getElementById('verdict-butchered-btn');
+      const banner = document.getElementById('verdict-reaction-banner');
+
+      nailedBtn.classList.remove('ring-2', 'ring-emerald-300', 'bg-emerald-500/45');
+      butcheredBtn.classList.remove('ring-2', 'ring-rose-300', 'bg-rose-500/45');
+
+      if (type === 'nailed') {
+        SFX.play('herring');
+        nailedBtn.classList.add('ring-2', 'ring-emerald-300', 'bg-emerald-500/45');
+        banner.className = 'mt-3 text-center text-xs sm:text-sm font-bold py-2.5 px-3 rounded-xl bg-emerald-500/20 border border-emerald-400/50 text-emerald-200';
+        banner.textContent = `👏 สุดยอด! ${playerName} รู้ลึก รู้จริง เล่าได้เป๊ะปังระดับสารานุกรมเดินได้! (Encyclopedia Master!)`;
+      } else {
+        SFX.play('bluefish');
+        butcheredBtn.classList.add('ring-2', 'ring-rose-300', 'bg-rose-500/45');
+        banner.className = 'mt-3 text-center text-xs sm:text-sm font-bold py-2.5 px-3 rounded-xl bg-rose-500/20 border border-rose-400/50 text-rose-200';
+        banner.textContent = `🤣 โป๊ะแตก! ${playerName} ถือคำตอบจริงอยู่ในมือแท้ๆ แต่แถออกทะเลไปไกลคนละโลก! (Totally Off-Track!)`;
+      }
+
+      banner.classList.remove('hidden');
+    }
+
+    function proceedToNextRound() {
+      SFX.play('click');
+      if (gameState.currentRound < gameState.totalRounds) {
+        gameState.currentRound += 1;
+        setupRound();
+      } else {
+        renderFinalPodium();
+      }
+    }
+
+    function renderModalScoreboard() {
+      const container = document.getElementById('modal-leaderboard-list');
+      container.innerHTML = '';
+
+      const sorted = [...gameState.players].sort((a, b) => b.score - a.score);
+      sorted.forEach((p, idx) => {
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between bg-slate-950/80 border border-slate-800 px-4 py-3 rounded-xl';
+        row.innerHTML = `
+          <div class="flex items-center gap-3">
+            <span class="font-game font-bold text-sm w-6 text-slate-400">#${idx + 1}</span>
+            <span class="text-xl">${p.avatar}</span>
+            <span class="font-bold text-white text-sm">${escapeHtml(p.name)}</span>
+          </div>
+          <span class="font-game font-bold text-amber-300 text-base">${p.score} pts</span>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function renderFinalPodium() {
+      SFX.play('bank');
+      const sorted = [...gameState.players].sort((a, b) => b.score - a.score);
+      const topScore = sorted[0].score;
+      const winners = sorted.filter(p => p.score === topScore);
+
+      const headline = document.getElementById('winner-headline');
+      if (winners.length === 1) {
+        headline.textContent = `${winners[0].avatar} ${winners[0].name} Wins!`;
+      } else {
+        headline.textContent = `It's a Tie! ${winners.map(w => w.name).join(' & ')} Win!`;
+      }
+
+      const board = document.getElementById('final-leaderboard');
+      board.innerHTML = '';
+
+      sorted.forEach((p, idx) => {
+        const medals = ['🥇', '🥈', '🥉'];
+        const badge = medals[idx] || `#${idx + 1}`;
+        const isTop = p.score === topScore;
+
+        const row = document.createElement('div');
+        row.className = `flex items-center justify-between px-5 py-3.5 rounded-2xl border ${
+          isTop
+            ? 'bg-gradient-to-r from-amber-500/25 to-yellow-500/10 border-amber-400/60 shadow-lg'
+            : 'bg-slate-950/70 border-slate-800'
+        }`;
+
+        row.innerHTML = `
+          <div class="flex items-center gap-3">
+            <span class="text-2xl font-game">${badge}</span>
+            <span class="text-2xl">${p.avatar}</span>
+            <span class="font-bold text-base sm:text-lg text-white">${escapeHtml(p.name)}</span>
+          </div>
+          <div class="font-game font-bold text-xl ${isTop ? 'text-amber-300' : 'text-cyan-300'}">
+            ${p.score} pts
+          </div>
+        `;
+        board.appendChild(row);
+      });
+
+      showScreen('screen-gameover');
+    }
+
+    function playAgainSamePlayers() {
+      startGame();
+    }
+
+    function resetToSetup() {
+      closeModal('confirm-exit-modal');
+      SFX.play('click');
+      renderPlayerList();
+      showScreen('screen-setup');
+    }
+
+    /**
+     * HTML Sanitizer for User-Entered Names & Custom Questions
+     */
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
